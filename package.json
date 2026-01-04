@@ -1,12 +1,21 @@
 {
-  "name": "turbo-gravity-bot",
+  "name": "@turborx/turbo-gravity-bot",
   "version": "1.0.0",
-  "private": true,
+  "description": "Discord bot with integrated web control panel",
+  "author": "TurboRx",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TurboRx/Turbo-Gravity.git"
+  },
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
