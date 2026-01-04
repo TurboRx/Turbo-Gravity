@@ -15,10 +15,20 @@ export default {
     const userId = interaction.options.getString('userid');
     const reason = interaction.options.getString('reason') || 'No reason provided';
 
+    if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({ content: 'I need ban permissions to do that.', ephemeral: true });
+    }
+
     try {
+      const bans = await interaction.guild.bans.fetch();
+      const bannedUser = bans.get(userId);
+      if (!bannedUser) {
+        return interaction.reply({ content: 'That user is not banned.', ephemeral: true });
+      }
+
       await interaction.guild.bans.remove(userId, reason);
       return interaction.reply({
-        content: `Unbanned user ${userId} | Reason: ${reason}`,
+        content: `Unbanned user ${bannedUser.user.tag} | Reason: ${reason}`,
         ephemeral: true
       });
     } catch (err) {

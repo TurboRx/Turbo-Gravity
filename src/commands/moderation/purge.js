@@ -10,12 +10,15 @@ export default {
     ),
   async execute(interaction) {
     const amount = interaction.options.getNumber('amount');
+    if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageMessages)) {
+      return interaction.reply({ content: 'I need message management permissions to do that.', ephemeral: true });
+    }
 
-    const messages = await interaction.channel.messages.fetch({ limit: amount });
-    await interaction.channel.bulkDelete(messages);
+    const fetched = await interaction.channel.messages.fetch({ limit: amount });
+    const deleted = await interaction.channel.bulkDelete(fetched, true);
 
     return interaction.reply({
-      content: `Deleted ${messages.size} messages.`,
+      content: `Deleted ${deleted.size} messages.${deleted.size < fetched.size ? ' (Messages older than 14 days were skipped)' : ''}`,
       ephemeral: true
     });
   }

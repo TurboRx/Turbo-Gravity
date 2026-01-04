@@ -8,21 +8,54 @@ export default {
     .addUserOption(option =>
       option.setName('target').setDescription('User to ban').setRequired(true)
     )
+    .addIntegerOption(option =>
+      option
+        .setName('delete_days')
+        .setDescription('Days of messages to delete (0-7)')
+        .setRequired(false)
+        .setMinValue(0)
+        .setMaxValue(7)
+    )
     .addStringOption(option =>
       option.setName('reason').setDescription('Reason for ban').setRequired(false)
     ),
   async execute(interaction) {
-    const target = interaction.options.getUser('target');
+    const user = interaction.options.getUser('target');
+    const member = interaction.options.getMember('target');
     const reason = interaction.options.getString('reason') || 'No reason provided';
+    const deleteDays = interaction.options.getInteger('delete_days') ?? 0;
 
-    if (target.id === interaction.user.id) {
+    if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({ content: 'I need ban permissions to do that.', ephemeral: true });
+    }
+
+    if (user.id === interaction.user.id) {
       return interaction.reply({ content: 'You cannot ban yourself.', ephemeral: true });
     }
 
-    await interaction.guild.members.ban(target, { reason });
-    return interaction.reply({
-      content: `Banned ${target.tag} | Reason: ${reason}`,
-      ephemeral: true
-    });
+    if (member) {
+      if (!member.bannable) {
+        return interaction.reply({ content: 'I cannot ban that member.', ephemeral: true });
+      }
+      const issuer = interaction.member;
+      if (issuer.roles.highest && member.roles.highest?.comparePositionTo(issuer.roles.highest) >= 0) {
+        return interaction.reply({ content: 'You cannot ban someone with an equal or higher role.', ephemeral: true });
+      }
+    }
+
+    try {
+      await interaction.guild.members.ban(user, { reason, deleteMessageSeconds: deleteDays * 86400 });
+      try {
+        await user.send(`You were banned from **${interaction.guild.name}** | Reason: ${reason}`);
+      } catch (err) {
+        // ignore DM failures
+      }
+      return interaction.reply({
+        content: `Banned ${user.tag}${deleteDays ? ` and deleted ${deleteDays} day(s) of messages` : ''} | Reason: ${reason}`,
+        ephemeral: true
+      });
+    } catch (err) {
+      return interaction.reply({ content: `Failed to ban: ${err.message}`, ephemeral: true });
+    }
   }
 };

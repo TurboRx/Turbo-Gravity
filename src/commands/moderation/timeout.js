@@ -9,7 +9,7 @@ export default {
       option.setName('target').setDescription('Member to timeout').setRequired(true)
     )
     .addNumberOption(option =>
-      option.setName('duration').setDescription('Duration in minutes').setRequired(true)
+      option.setName('duration').setDescription('Duration in minutes').setRequired(true).setMinValue(1).setMaxValue(40320)
     )
     .addStringOption(option =>
       option.setName('reason').setDescription('Reason for timeout').setRequired(false)
@@ -23,10 +23,26 @@ export default {
       return interaction.reply({ content: 'Unable to find that member.', ephemeral: true });
     }
 
-    await target.timeout(duration, reason);
-    return interaction.reply({
-      content: `Timed out ${target.user.tag} for ${interaction.options.getNumber('duration')} minutes | Reason: ${reason}`,
-      ephemeral: true
-    });
+    if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return interaction.reply({ content: 'I need moderate members permission to do that.', ephemeral: true });
+    }
+
+    if (target.id === interaction.user.id) {
+      return interaction.reply({ content: 'You cannot timeout yourself.', ephemeral: true });
+    }
+
+    if (!target.moderatable) {
+      return interaction.reply({ content: 'I cannot timeout that member.', ephemeral: true });
+    }
+
+    try {
+      await target.timeout(duration, reason);
+      return interaction.reply({
+        content: `Timed out ${target.user.tag} for ${interaction.options.getNumber('duration')} minutes | Reason: ${reason}`,
+        ephemeral: true
+      });
+    } catch (err) {
+      return interaction.reply({ content: `Failed to timeout: ${err.message}`, ephemeral: true });
+    }
   }
 };
