@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup | Turbo Gravity</title>
+  <link rel="stylesheet" href="/public/styles.css" />
+</head>
+<body>
+  <div class="backdrop"></div>
+  <main class="page setup-page">
+    <section class="setup-card">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>Turbo Gravity Setup</h1>
+          <p>Configure your Discord bot to get started</p>
+        </div>
+      </div>
+
+      <form class="form setup-form" method="POST" action="/setup">
+        <div class="form-section">
+          <h3>🤖 Discord Bot Credentials</h3>
+          <label>Bot Token
+            <input type="password" name="botToken" placeholder="Your Discord bot token" required />
+          </label>
+          <div class="dual">
+            <label>Client ID
+              <input type="text" name="clientId" placeholder="Application client ID" required />
+            </label>
+            <label>Client Secret
+              <input type="password" name="clientSecret" placeholder="OAuth2 client secret" required />
+            </label>
+          </div>
+          <label>OAuth Callback URL
+            <input type="url" name="callbackUrl" value="http://localhost:3000/auth/discord/callback" required />
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>🗄️ Database & Security</h3>
+          <label>MongoDB URI
+            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" required />
+          </label>
+          <label>Session Secret
+            <input type="password" name="sessionSecret" placeholder="Random secure string" required />
+          </label>
+          <label>Admin User IDs (comma-separated)
+            <input type="text" name="adminIds" placeholder="123456789,987654321" required />
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>⚙️ Bot Settings</h3>
+          <div class="dual">
+            <label>Guild ID (optional)
+              <input type="text" name="guildId" placeholder="For guild-only commands" />
+            </label>
+            <label>Port
+              <input type="number" name="port" value="3000" required />
+            </label>
+          </div>
+          <div class="dual">
+            <label>Presence Type
+              <select name="presenceType">
+                <option value="0">Playing</option>
+                <option value="2">Listening</option>
+                <option value="3">Watching</option>
+                <option value="5">Competing</option>
+              </select>
+            </label>
+            <label>Command Scope
+              <select name="commandScope">
+                <option value="guild">Guild</option>
+                <option value="global">Global</option>
+              </select>
+            </label>
+          </div>
+          <label>Presence Text
+            <input type="text" name="presenceText" value="Ready to serve" />
+          </label>
+          <label>Invite Permissions
+            <input type="text" name="invitePermissions" value="8" />
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" name="autoStart" />
+            Auto-start bot on launch
+          </label>
+        </div>
+
+        <button class="button primary" type="submit">Save & Start</button>
+      </form>
+    </section>
+  </main>
+
+  <style>
+    .setup-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .setup-card {
+      width: 100%;
+      max-width: 720px;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
+    .setup-card .brand {
+      margin-bottom: 24px;
+    }
+    .setup-form {
+      gap: 24px;
+    }
+    .form-section {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      background: var(--panel-strong);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+    }
+    .form-section h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+  </style>
+</body>
+</html>
