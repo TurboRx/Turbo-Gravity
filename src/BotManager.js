@@ -130,13 +130,18 @@ export default class BotManager {
   async loadCommands() {
     this.commands.clear();
     const commandsPath = path.join(__dirname, 'commands');
-    const files = await this.walk(commandsPath);
-    for (const file of files) {
-      if (!file.endsWith('.js')) continue;
-      const moduleUrl = pathToFileURL(file).href;
-      const command = (await import(moduleUrl)).default;
-      if (!command?.data || !command?.execute) continue;
-      this.commands.set(command.data.name, command);
+    try {
+      const files = await this.walk(commandsPath);
+      for (const file of files) {
+        if (!file.endsWith('.js')) continue;
+        const moduleUrl = pathToFileURL(file).href;
+        const command = (await import(moduleUrl)).default;
+        if (!command?.data || !command?.execute) continue;
+        this.commands.set(command.data.name, command);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('No commands directory found, skipping command load:', err.message);
     }
   }
 

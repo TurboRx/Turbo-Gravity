@@ -17,7 +17,10 @@ const __dirname = path.dirname(__filename);
 
 let localConfig = await loadLocalConfig();
 let configured = isConfigured(localConfig);
-let adminIds = localConfig.adminIds.split(',').map(id => id.trim()).filter(Boolean);
+let adminIds = (localConfig.adminIds || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(id => id.length > 0);
 
 const botManager = new BotManager({
   token: localConfig.botToken,
@@ -94,7 +97,7 @@ const connectMongo = async () => {
 };
 
 const getConfig = async () => {
-  if (!localConfig.mongoUri) return null;
+  if (!localConfig.mongoUri) return configToView({});
   let config = await Config.findOne();
   if (!config) {
     config = await Config.create({
@@ -115,12 +118,12 @@ const getConfig = async () => {
 };
 
 const configToView = config => ({
-  autoStart: config.autoStart,
-  presenceText: config.presenceText,
-  presenceType: config.presenceType,
-  commandScope: config.commandScope,
-  guildId: config.guildId,
-  invitePermissions: config.invitePermissions
+  autoStart: config?.autoStart || false,
+  presenceText: config?.presenceText || 'Ready to serve',
+  presenceType: config?.presenceType ?? 0,
+  commandScope: config?.commandScope || 'guild',
+  guildId: config?.guildId || '',
+  invitePermissions: config?.invitePermissions || '8'
 });
 
 app.get('/setup', (req, res) => {
@@ -150,7 +153,10 @@ app.post('/setup', async (req, res) => {
     await saveLocalConfig(newConfig);
     localConfig = newConfig;
     configured = isConfigured(localConfig);
-    adminIds = localConfig.adminIds.split(',').map(id => id.trim()).filter(Boolean);
+    adminIds = (localConfig.adminIds || '')
+      .split(',')
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
 
     configurePassport(localConfig);
     botManager.token = localConfig.botToken;

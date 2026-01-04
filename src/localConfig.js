@@ -30,7 +30,9 @@ export async function loadLocalConfig() {
     if (!existsSync(CONFIG_FILE)) return { ...defaultConfig };
     const data = await readFile(CONFIG_FILE, 'utf-8');
     return { ...defaultConfig, ...JSON.parse(data) };
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('Failed to load local config, using defaults:', err.message);
     return { ...defaultConfig };
   }
 }

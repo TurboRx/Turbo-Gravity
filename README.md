@@ -174,4 +174,3 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 ## Support
 
 For issues or questions, open an issue on [GitHub](https://github.com/TurboRx/Turbo-Gravity-/issues).
-A Disocrd Bot that comes with a interactive Control Panel and written in JS.
