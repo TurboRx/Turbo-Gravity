@@ -31,7 +31,7 @@ A powerful, feature-rich Discord bot with an **integrated web-based Control Pane
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/TurboRx/Turbo-Gravity-.git
+   git clone https://github.com/TurboRx/Turbo-Gravity.git
    cd Turbo-Gravity-
    ```
 
