@@ -102,12 +102,29 @@ All commands are slash commands (`/`). Once the bot is running, they'll be regis
 
 ## Docker Deployment
 
-### Build Image
+### Using Pre-built Image (Recommended)
+
+Pull the latest image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/turborx/turbo-gravity:main
+```
+
+Run the container:
+```bash
+docker run -d \
+  -p 8080:8080 \
+  --name turbo-gravity \
+  ghcr.io/turborx/turbo-gravity:main
+```
+
+### Build Image Locally
+
 ```bash
 docker build -t turbo-gravity .
 ```
 
-### Run Container
+Run the container:
 ```bash
 docker run -d \
   -p 8080:8080 \
