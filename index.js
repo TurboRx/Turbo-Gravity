@@ -180,6 +180,13 @@ app.post('/setup', async (req, res) => {
       .map(id => id.trim())
       .filter(id => id.length > 0);
 
+    const PORT = process.env.PORT || newConfig.port || 8080;
+    if (!app.listening) {
+      app.listen(PORT, () => {
+        console.log(`Dashboard running on port ${PORT}`);
+      });
+    }
+
     configureOAuth(localConfig);
     botManager.token = localConfig.botToken;
     botManager.clientId = localConfig.clientId;
@@ -469,12 +476,12 @@ const bootstrap = async () => {
     }
   }
 
-  app.listen(localConfig.port, () => {
+  app.listen(localConfig.port || 8080, () => {
     // eslint-disable-next-line no-console
-    console.log(`Dashboard running on port ${localConfig.port}`);
+    console.log(`Dashboard running on port ${localConfig.port || 8080}`);
     if (!configured) {
       // eslint-disable-next-line no-console
-      console.log(`Setup required: http://localhost:${localConfig.port}/setup`);
+      console.log(`Setup required: http://localhost:${localConfig.port || 8080}/setup`);
     }
   });
 
