@@ -1,7 +1,5 @@
 import express from 'express';
 import session from 'express-session';
-import passport from 'passport';
-import { Strategy as DiscordStrategy } from 'passport-discord';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -35,25 +33,46 @@ const botManager = new BotManager({
 
 let cachedConfig = null;
 
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+const getDiscordToken = async (code, config) => {
+  const params = new URLSearchParams();
+  params.append('client_id', config.clientId);
+  params.append('client_secret', config.clientSecret);
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', config.callbackUrl);
 
-const configurePassport = config => {
-  if (!config?.clientId || !config?.clientSecret) return;
-  passport.use(
-    new DiscordStrategy(
-      {
-        clientID: config.clientId,
-        clientSecret: config.clientSecret,
-        callbackURL: config.callbackUrl,
-        scope: ['identify', 'guilds']
-      },
-      (accessToken, refreshToken, profile, done) => done(null, profile)
-    )
-  );
+  const response = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    body: params,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Discord OAuth error: ${response.status}`);
+  }
+
+  return response.json();
 };
 
-if (configured) configurePassport(localConfig);
+const getDiscordUser = async accessToken => {
+  const response = await fetch('https://discord.com/api/users/@me', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Discord API error: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+const configureOAuth = config => {
+  // OAuth configuration is validated at runtime
+  if (!config?.clientId || !config?.clientSecret) return false;
+  return true;
+};
+
+if (configured) configureOAuth(localConfig);
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -68,8 +87,6 @@ app.use(
     saveUninitialized: false
   })
 );
-app.use(passport.initialize());
-app.use(passport.session());
 
 const ensureConfigured = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
@@ -78,14 +95,14 @@ const ensureConfigured = (req, res, next) => {
 
 const ensureAuth = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
-  if (req.isAuthenticated()) return next();
+  if (req.session?.user) return next();
   res.redirect('/auth/discord');
 };
 
 const ensureAdmin = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
-  if (!req.isAuthenticated()) return res.redirect('/auth/discord');
-  if (adminIds.includes(req.user.id)) return next();
+  if (!req.session?.user) return res.redirect('/auth/discord');
+  if (adminIds.includes(req.session.user.id)) return next();
   return res.status(403).send('<h1>403 Forbidden</h1><p>You do not have admin permissions to access this page.</p>');
 };
 
@@ -163,7 +180,7 @@ app.post('/setup', async (req, res) => {
       .map(id => id.trim())
       .filter(id => id.length > 0);
 
-    configurePassport(localConfig);
+    configureOAuth(localConfig);
     botManager.token = localConfig.botToken;
     botManager.clientId = localConfig.clientId;
     botManager.guildId = localConfig.guildId;
@@ -212,24 +229,57 @@ app.get('/', ensureAuth, async (req, res) => {
   const config = cachedConfig || await getConfig();
   const inviteLink = botManager.getInviteLink({ permissions: config.invitePermissions });
   res.render('dashboard', {
-    user: req.user,
+    user: req.session.user,
     inviteLink,
     botStatus: botManager.client ? 'online' : 'offline',
     config: configToView(config)
   });
 });
 
-app.get('/auth/discord', ensureConfigured, passport.authenticate('discord'));
-app.get(
-  '/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: '/' }),
-  (req, res) => res.redirect('/')
-);
+app.get('/auth/discord', ensureConfigured, (req, res) => {
+  const config = localConfig;
+  if (!config?.clientId) {
+    return res.status(500).send('OAuth not configured');
+  }
 
-app.get('/logout', (req, res, next) => {
-  req.logout(err => {
-    if (err) return next(err);
+  const scopes = ['identify', 'guilds'];
+  const baseUrl = 'https://discord.com/api/oauth2/authorize';
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.callbackUrl,
+    response_type: 'code',
+    scope: scopes.join(' ')
+  });
+
+  res.redirect(`${baseUrl}?${params.toString()}`);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+  if (!oauth) {
+    return res.status(500).send('OAuth not configured');
+  }
+  
+  const code = req.query.code;
+  if (!code) {
+    return res.redirect('/');
+  }
+  
+  try {
+    const user = await oauth.getUser(code);
+    req.session.user = user;
     res.redirect('/');
+  } catch (err) {
+    console.error('OAuth error:', err);
+    res.redirect('/');
+  }
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      return res.status(500).send('Failed to logout');
+    }
+    res.redirect('/setup');
   });
 });
 
@@ -292,7 +342,7 @@ app.get('/control/invite', ensureAuth, async (req, res) => {
 app.get('/control/config', ensureAdmin, async (req, res) => {
   const config = cachedConfig || await getConfig();
   res.render('dashboard', {
-    user: req.user,
+    user: req.session.user,
     inviteLink: botManager.getInviteLink({ permissions: config.invitePermissions }),
     botStatus: botManager.client ? 'online' : 'offline',
     config: configToView(config)
@@ -351,13 +401,16 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
 });
 
 const bootstrap = async () => {
-  if (configured && localConfig.mongoUri) {
-    try {
-      await connectMongo();
-      await getConfig();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('Mongo connection failed, using local config only:', err.message);
+  if (configured) {
+    configureOAuth(localConfig);
+    if (localConfig.mongoUri) {
+      try {
+        await connectMongo();
+        await getConfig();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Mongo connection failed, using local config only:', err.message);
+      }
     }
   }
 
