@@ -31,8 +31,17 @@ export default {
       return interaction.reply({ content: 'You cannot timeout yourself.', ephemeral: true });
     }
 
+    if (target.id === interaction.client.user.id) {
+      return interaction.reply({ content: 'I cannot timeout myself.', ephemeral: true });
+    }
+
     if (!target.moderatable) {
       return interaction.reply({ content: 'I cannot timeout that member.', ephemeral: true });
+    }
+
+    const issuer = interaction.member;
+    if (issuer.roles.highest && target.roles.highest?.comparePositionTo(issuer.roles.highest) >= 0) {
+      return interaction.reply({ content: 'You cannot timeout someone with an equal or higher role.', ephemeral: true });
     }
 
     try {

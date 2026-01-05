@@ -9,7 +9,7 @@ export default {
     ),
   async execute(interaction) {
     const user = interaction.options.getUser('target') || interaction.user;
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    const member = await interaction.guild?.members.fetch(user.id).catch(() => null);
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ size: 256 }) })

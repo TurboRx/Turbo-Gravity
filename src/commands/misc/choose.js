@@ -23,12 +23,16 @@ export default {
     const options = parseOptions(raw);
 
     if (options.length < 2) {
-      return interaction.reply({ content: 'Please provide at least two options.', ephemeral: true });
+      return interaction.reply({ content: 'Please provide at least two distinct options separated by commas or pipes.', ephemeral: true });
+    }
+
+    if (options.length > 25) {
+      return interaction.reply({ content: 'Too many options! Please provide 25 or fewer choices.', ephemeral: true });
     }
 
     const choice = options[Math.floor(Math.random() * options.length)];
-    const prompt = question ? `${question}\n` : '';
+    const prompt = question ? `**${question}**\n` : '';
 
-    return interaction.reply({ content: `${prompt}I choose: **${choice}**`, ephemeral: true });
+    return interaction.reply({ content: `${prompt}🎲 I choose: **${choice}**`, ephemeral: true });
   }
 };

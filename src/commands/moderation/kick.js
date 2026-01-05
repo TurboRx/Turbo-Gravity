@@ -27,12 +27,16 @@ export default {
       return interaction.reply({ content: 'You cannot kick yourself.', ephemeral: true });
     }
 
+    if (target.id === interaction.client.user.id) {
+      return interaction.reply({ content: 'I cannot kick myself.', ephemeral: true });
+    }
+
     if (!target.kickable) {
       return interaction.reply({ content: 'I cannot kick that member.', ephemeral: true });
     }
 
     const issuer = interaction.member;
-    if (issuer.roles.highest && target.roles.highest?.comparePositionTo(issuer.roles.highest) >= 0) {
+    if (issuer.roles.highest.position <= target.roles.highest.position) {
       return interaction.reply({ content: 'You cannot kick someone with an equal or higher role.', ephemeral: true });
     }
 

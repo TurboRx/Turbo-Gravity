@@ -18,21 +18,26 @@ export default {
   async execute(interaction) {
     const text = interaction.options.getString('message');
     const minutes = interaction.options.getInteger('minutes');
+    
+    if (text.length > 1000) {
+      return interaction.reply({ content: 'Reminder message is too long (max 1000 characters).', ephemeral: true });
+    }
+    
     const ms = minutes * 60 * 1000;
 
-    await interaction.reply({ content: `Reminder set for ${minutes} minute(s). I'll DM you when it's time.`, ephemeral: true });
+    await interaction.reply({ content: `⏰ Reminder set for ${minutes} minute(s). I'll DM you when it's time.`, ephemeral: true });
 
     setTimeout(async () => {
       try {
-        await interaction.user.send(`⏰ Reminder: ${text}`);
+        await interaction.user.send(`⏰ **Reminder:** ${text}`);
       } catch (err) {
         try {
           await interaction.followUp({
-            content: `Couldn't DM you, so here's your reminder: ${text}`,
+            content: `⏰ Couldn't DM you, so here's your reminder: ${text}`,
             ephemeral: true
           });
         } catch (innerErr) {
-          // final fallback: ignore
+          // final fallback: ignore if both fail
         }
       }
     }, ms);

@@ -11,6 +11,11 @@ export default {
   async execute(interaction) {
     const reason = interaction.options.getString('reason') || 'No reason provided';
     const everyone = interaction.guild.roles.everyone;
+
+    if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return interaction.reply({ content: 'I need manage channels permission to do that.', ephemeral: true });
+    }
+
     const overwrite = interaction.channel.permissionOverwrites.cache.get(everyone.id);
     const alreadyLocked = overwrite?.deny?.has('SendMessages');
 
@@ -18,10 +23,13 @@ export default {
       return interaction.reply({ content: 'Channel is already locked.', ephemeral: true });
     }
 
-    await interaction.channel.permissionOverwrites.edit(everyone, {
-      SendMessages: false
-    }, { reason });
-
-    return interaction.reply({ content: `Channel locked. Reason: ${reason}` });
+    try {
+      await interaction.channel.permissionOverwrites.edit(everyone, {
+        SendMessages: false
+      }, { reason });
+      return interaction.reply({ content: `🔒 Channel locked. Reason: ${reason}` });
+    } catch (err) {
+      return interaction.reply({ content: `Failed to lock channel: ${err.message}`, ephemeral: true });
+    }
   }
 };

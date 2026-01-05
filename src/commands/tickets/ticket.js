@@ -30,12 +30,17 @@ async function handleCreate(interaction) {
   const reason = interaction.options.getString('reason') || 'No reason provided';
   const category = interaction.options.getChannel('category');
   const staffRole = interaction.options.getRole('staffrole');
+
+  if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return interaction.reply({ content: 'I need manage channels permission to create tickets.', ephemeral: true });
+  }
+
   const existing = interaction.guild.channels.cache.find(
     ch => ch.topic && ch.topic.includes(`${TOPIC_PREFIX} ${interaction.user.id}`)
   );
 
   if (existing) {
-    return interaction.reply({ content: 'You already have an open ticket.', ephemeral: true });
+    return interaction.reply({ content: `You already have an open ticket: ${existing}`, ephemeral: true });
   }
 
   const overwrites = [
@@ -62,13 +67,18 @@ async function handleCreate(interaction) {
 
   const channelName = `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user'}-${interaction.user.discriminator || interaction.user.id.slice(-4)}`;
 
-  const channel = await interaction.guild.channels.create({
-    name: channelName.slice(0, 90),
-    type: ChannelType.GuildText,
-    parent: category?.type === ChannelType.GuildCategory ? category.id : undefined,
-    topic: `${TOPIC_PREFIX} ${interaction.user.id} | Reason: ${reason}`,
-    permissionOverwrites: overwrites
-  });
+  let channel;
+  try {
+    channel = await interaction.guild.channels.create({
+      name: channelName.slice(0, 90),
+      type: ChannelType.GuildText,
+      parent: category?.type === ChannelType.GuildCategory ? category.id : undefined,
+      topic: `${TOPIC_PREFIX} ${interaction.user.id} | Reason: ${reason}`,
+      permissionOverwrites: overwrites
+    });
+  } catch (err) {
+    return interaction.reply({ content: `Failed to create ticket: ${err.message}`, ephemeral: true });
+  }
 
   const embed = new EmbedBuilder()
     .setTitle('Support Ticket')
@@ -99,22 +109,27 @@ async function handleClose(interaction) {
     return interaction.reply({ content: 'You cannot close this ticket.', ephemeral: true });
   }
 
-  await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-    SendMessages: false
-  });
+  try {
+    await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+      SendMessages: false
+    });
 
-  await interaction.reply({ content: `Ticket closed. Reason: ${reason}${deleteAfter ? ` | Deleting in ${deleteAfter} minute(s)` : ''}` });
+    await interaction.reply({ content: `🔒 Ticket closed. Reason: ${reason}${deleteAfter ? ` | Deleting in ${deleteAfter} minute(s)` : ''}` });
 
-  if (deleteAfter && deleteAfter > 0) {
-    setTimeout(() => {
-      interaction.channel.delete(`Ticket closed: ${reason}`).catch(() => {});
-    }, deleteAfter * 60 * 1000);
+    if (deleteAfter && deleteAfter > 0) {
+      setTimeout(() => {
+        interaction.channel.delete(`Ticket closed: ${reason}`).catch(() => {});
+      }, deleteAfter * 60 * 1000);
+    }
+  } catch (err) {
+    return interaction.reply({ content: `Failed to close ticket: ${err.message}`, ephemeral: true });
   }
 }
 
 async function handleAdd(interaction) {
   const user = interaction.options.getUser('user');
   const ownerId = extractOwnerId(interaction.channel);
+  
   if (!ownerId) {
     return interaction.reply({ content: 'This does not appear to be a ticket channel.', ephemeral: true });
   }
@@ -124,18 +139,27 @@ async function handleAdd(interaction) {
     return interaction.reply({ content: 'You cannot modify this ticket.', ephemeral: true });
   }
 
-  await interaction.channel.permissionOverwrites.edit(user.id, {
-    ViewChannel: true,
-    SendMessages: true,
-    ReadMessageHistory: true
-  });
+  if (user.id === ownerId) {
+    return interaction.reply({ content: 'That user is already the ticket owner.', ephemeral: true });
+  }
 
-  return interaction.reply({ content: `Added ${user.tag} to the ticket.`, ephemeral: true });
+  try {
+    await interaction.channel.permissionOverwrites.edit(user.id, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true
+    });
+
+    return interaction.reply({ content: `✅ Added ${user.tag} to the ticket.`, ephemeral: true });
+  } catch (err) {
+    return interaction.reply({ content: `Failed to add user: ${err.message}`, ephemeral: true });
+  }
 }
 
 async function handleRemove(interaction) {
   const user = interaction.options.getUser('user');
   const ownerId = extractOwnerId(interaction.channel);
+  
   if (!ownerId) {
     return interaction.reply({ content: 'This does not appear to be a ticket channel.', ephemeral: true });
   }
@@ -145,13 +169,20 @@ async function handleRemove(interaction) {
     return interaction.reply({ content: 'You cannot modify this ticket.', ephemeral: true });
   }
 
-  await interaction.channel.permissionOverwrites.edit(user.id, {
-    ViewChannel: false,
-    SendMessages: false,
-    ReadMessageHistory: false
-  });
+  if (user.id === ownerId) {
+    return interaction.reply({ content: 'Cannot remove the ticket owner.', ephemeral: true });
+  }
 
-  return interaction.reply({ content: `Removed ${user.tag} from the ticket.`, ephemeral: true });
+  if (user.id === interaction.client.user.id) {
+    return interaction.reply({ content: 'Cannot remove the bot from the ticket.', ephemeral: true });
+  }
+
+  try {
+    await interaction.channel.permissionOverwrites.delete(user.id);
+    return interaction.reply({ content: `❌ Removed ${user.tag} from the ticket.`, ephemeral: true });
+  } catch (err) {
+    return interaction.reply({ content: `Failed to remove user: ${err.message}`, ephemeral: true });
+  }
 }
 
 export default {

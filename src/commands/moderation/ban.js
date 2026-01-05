@@ -33,12 +33,16 @@ export default {
       return interaction.reply({ content: 'You cannot ban yourself.', ephemeral: true });
     }
 
+    if (user.id === interaction.client.user.id) {
+      return interaction.reply({ content: 'I cannot ban myself.', ephemeral: true });
+    }
+
     if (member) {
       if (!member.bannable) {
-        return interaction.reply({ content: 'I cannot ban that member.', ephemeral: true });
+        return interaction.reply({ content: 'I cannot ban that member (role hierarchy or permissions).', ephemeral: true });
       }
       const issuer = interaction.member;
-      if (issuer.roles.highest && member.roles.highest?.comparePositionTo(issuer.roles.highest) >= 0) {
+      if (issuer.roles.highest.position <= member.roles.highest.position) {
         return interaction.reply({ content: 'You cannot ban someone with an equal or higher role.', ephemeral: true });
       }
     }

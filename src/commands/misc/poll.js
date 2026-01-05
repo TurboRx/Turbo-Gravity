@@ -36,8 +36,12 @@ export default {
 
     const message = await interaction.reply({ embeds: [embed], fetchReply: true });
 
-    for (let i = 0; i < choices.length; i += 1) {
-      await message.react(numberEmojis[i]);
+    try {
+      for (let i = 0; i < choices.length; i += 1) {
+        await message.react(numberEmojis[i]);
+      }
+    } catch (err) {
+      // Reaction failed, but poll is still created
     }
   }
 };

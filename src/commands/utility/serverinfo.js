@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -8,7 +8,7 @@ export default {
     const { guild } = interaction;
     const owner = await guild.fetchOwner().catch(() => null);
     const channels = guild.channels.cache;
-    const textChannels = channels.filter(ch => ch.isTextBased()).size;
+    const textChannels = channels.filter(ch => ch.isTextBased() && ch.type !== ChannelType.GuildCategory).size;
     const voiceChannels = channels.filter(ch => ch.isVoiceBased()).size;
 
     const embed = new EmbedBuilder()

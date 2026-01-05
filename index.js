@@ -86,7 +86,7 @@ const ensureAdmin = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
   if (!req.isAuthenticated()) return res.redirect('/auth/discord');
   if (adminIds.includes(req.user.id)) return next();
-  return res.status(403).send('Forbidden');
+  return res.status(403).send('<h1>403 Forbidden</h1><p>You do not have admin permissions to access this page.</p>');
 };
 
 const connectMongo = async () => {
@@ -133,6 +133,11 @@ app.get('/setup', (req, res) => {
 
 app.post('/setup', async (req, res) => {
   try {
+    // Validate required fields
+    if (!req.body.botToken || !req.body.clientId || !req.body.clientSecret || !req.body.mongoUri || !req.body.sessionSecret) {
+      return res.status(400).send('Missing required fields. Please fill in all required information.');
+    }
+
     const newConfig = {
       botToken: req.body.botToken,
       clientId: req.body.clientId,
@@ -263,6 +268,11 @@ app.post('/control/restart', ensureAdmin, async (req, res) => {
 
 app.post('/control/status', ensureAdmin, async (req, res) => {
   const { activityType, statusText } = req.body;
+  
+  if (!statusText || statusText.trim().length === 0) {
+    return res.status(400).send('Status text cannot be empty');
+  }
+  
   try {
     await botManager.setActivity({ type: activityType, text: statusText });
     res.redirect('/');

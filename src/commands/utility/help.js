@@ -5,7 +5,8 @@ export default {
     .setName('help')
     .setDescription('List available commands'),
   async execute(interaction) {
-    const commands = Array.from(interaction.client.commands.values());
+    const commands = Array.from(interaction.client.commands.values())
+      .sort((a, b) => a.data.name.localeCompare(b.data.name));
     const fields = commands.map(cmd => ({
       name: `/${cmd.data.name}`,
       value: cmd.data.description || 'No description provided',
