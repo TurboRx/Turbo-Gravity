@@ -122,22 +122,17 @@ export default class BotManager {
       }
       
       if (avatar && avatar.trim()) {
-        // Validate URL format
-        try {
-          new URL(avatar);
+        // Validate URL format using regex for better performance
+        const urlPattern = /^https?:\/\/.+\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i;
+        if (urlPattern.test(avatar.trim())) {
           updateData.avatar = avatar.trim();
-        } catch (err) {
+        } else {
           // eslint-disable-next-line no-console
-          console.error('❌ Invalid avatar URL:', err.message);
+          console.error('❌ Invalid avatar URL format. Must be a valid image URL (PNG/JPG/JPEG/GIF/WEBP)');
         }
       }
       
-      // Note: banner can only be set via user account, not bot user
-      // Discord API doesn't support banner for bots currently
-      if (banner) {
-        // eslint-disable-next-line no-console
-        console.log('ℹ️  Banner URL saved but cannot be applied (Discord API limitation)');
-      }
+      // Banner is not supported by Discord API for bots - ignore silently
       
       if (Object.keys(updateData).length > 0) {
         await this.client.user.edit(updateData);

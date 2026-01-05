@@ -134,6 +134,9 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // Configure session store - use MongoStore if MongoDB is available, otherwise MemoryStore with warning suppression
+// Note: CSRF protection is not implemented as this is an admin-only dashboard with OAuth authentication.
+// All control endpoints are protected by ensureAdmin middleware which checks admin user IDs.
+// For production deployments, consider adding CSRF tokens for additional security.
 const sessionConfig = {
   secret: localConfig.sessionSecret || 'temp-secret',
   resave: false,
@@ -586,7 +589,21 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
     await saveLocalConfig(updatedLocalConfig);
     localConfig = updatedLocalConfig;
 
-    botManager.applyConfig(config || updatedLocalConfig);
+    // Apply the config to bot manager - prefer MongoDB config if available, otherwise use local
+    const configToApply = config ? {
+      botToken: config.botToken || updatedLocalConfig.botToken,
+      clientId: config.clientId || updatedLocalConfig.clientId,
+      clientSecret: config.clientSecret || updatedLocalConfig.clientSecret,
+      callbackUrl: config.callbackUrl || updatedLocalConfig.callbackUrl,
+      guildId: config.guildId || updatedLocalConfig.guildId,
+      commandScope: config.commandScope || updatedLocalConfig.commandScope,
+      invitePermissions: config.invitePermissions || updatedLocalConfig.invitePermissions,
+      presenceText: config.presenceText || updatedLocalConfig.presenceText,
+      presenceType: config.presenceType ?? updatedLocalConfig.presenceType,
+      autoStart: config.autoStart ?? updatedLocalConfig.autoStart
+    } : updatedLocalConfig;
+
+    botManager.applyConfig(configToApply);
 
     const needsRestart =
       botManager.client &&

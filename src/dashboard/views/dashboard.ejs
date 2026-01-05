@@ -616,7 +616,15 @@
           <label>
             Bot Username
             <span class="help-text">The bot's display name (2-32 characters)</span>
-            <input type="text" name="username" placeholder="Turbo Gravity" minlength="2" maxlength="32" />
+            <input 
+              type="text" 
+              name="username" 
+              placeholder="Turbo Gravity" 
+              minlength="2" 
+              maxlength="32" 
+              pattern="[^\@\#\:\d].{1,31}"
+              title="Username must be 2-32 characters and cannot start with @, #, :, or a number"
+            />
           </label>
 
           <label>
@@ -627,8 +635,8 @@
 
           <label>
             Banner URL
-            <span class="help-text">Direct image URL for bot banner (PNG/JPG, recommended 600x240)</span>
-            <input type="url" name="banner" placeholder="https://i.imgur.com/example.png" />
+            <span class="help-text">⚠️ Banner URL for reference only (Discord API doesn't support bot banners yet)</span>
+            <input type="url" name="banner" placeholder="https://i.imgur.com/example.png" disabled title="Banner is not yet supported by Discord for bot users" />
           </label>
 
           <label>
