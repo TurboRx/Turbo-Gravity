@@ -46,7 +46,7 @@ A powerful, feature-rich Discord bot with an **integrated web-based Control Pane
    ```
 
 4. **Open the setup wizard**
-   Navigate to `http://localhost:3000/setup` in your browser.
+   Navigate to `http://localhost:8080/setup` in your browser.
 
 ---
 
@@ -60,7 +60,7 @@ The first time you run the app, you'll be redirected to `/setup` where you can c
 - **Bot Token** - From your Discord application
 - **Client ID** - Your application ID
 - **Client Secret** - OAuth2 client secret
-- **OAuth Callback URL** - Default: `http://localhost:3000/auth/discord/callback`
+- **OAuth Callback URL** - Default: `http://localhost:8080/auth/discord/callback`
 
 #### Database & Security
 - **MongoDB URI** - Connection string (e.g., `mongodb://localhost:27017/turbogravity`)
@@ -69,7 +69,7 @@ The first time you run the app, you'll be redirected to `/setup` where you can c
 
 #### Bot Settings
 - **Guild ID** - Optional, for guild-only command registration
-- **Port** - Dashboard port (default: 3000)
+- **Port** - Dashboard port (default: 8080)
 - **Presence Type** - Playing, Listening, Watching, Competing
 - **Presence Text** - Default bot status text
 - **Command Scope** - Guild (instant) or Global (up to 1 hour)
@@ -85,7 +85,7 @@ Copy `.env.example` to `.env` and fill values (settings will still be imported i
 ## Usage
 
 ### Dashboard Access
-1. Visit `http://localhost:3000`
+1. Visit `http://localhost:8080`
 2. Login with Discord OAuth
 3. Only configured admin users can access controls
 
@@ -110,12 +110,12 @@ docker build -t turbo-gravity .
 ### Run Container
 ```bash
 docker run -d \
-  -p 3000:3000 \
+  -p 8080:8080 \
   --name turbo-gravity \
   turbo-gravity
 ```
 
-Then visit `http://localhost:3000/setup` to configure via the web interface.
+Then visit `http://localhost:8080/setup` to configure via the web interface.
 
 ---
 
