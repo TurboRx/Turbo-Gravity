@@ -226,13 +226,14 @@ app.post('/setup', async (req, res) => {
 });
 
 app.get('/', ensureAuth, async (req, res) => {
+  res.redirect('/selector');
+});
+
+app.get('/selector', ensureAuth, async (req, res) => {
   const config = cachedConfig || await getConfig();
-  const inviteLink = botManager.getInviteLink({ permissions: config.invitePermissions });
-  res.render('dashboard', {
+  res.render('selector', {
     user: req.session.user,
-    inviteLink,
-    botStatus: botManager.client ? 'online' : 'offline',
-    config: configToView(config)
+    botStatus: botManager.client ? 'online' : 'offline'
   });
 });
 
@@ -255,22 +256,51 @@ app.get('/auth/discord', ensureConfigured, (req, res) => {
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
-  if (!oauth) {
+  const config = localConfig;
+  if (!config?.clientId || !config?.clientSecret) {
     return res.status(500).send('OAuth not configured');
   }
   
   const code = req.query.code;
+  const state = req.query.state;
+  
   if (!code) {
     return res.redirect('/');
   }
   
   try {
-    const user = await oauth.getUser(code);
-    req.session.user = user;
-    res.redirect('/');
+    const tokenData = await getDiscordToken(code, config);
+    if (!tokenData.access_token) {
+      throw new Error('No access token received');
+    }
+
+    const userInfo = await getDiscordUser(tokenData.access_token);
+    
+    // Fetch user guilds
+    const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const guilds = await guildsResponse.json();
+
+    // Filter guilds where user is admin
+    const adminGuilds = guilds.filter(guild => {
+      if (!guild.permissions) return false;
+      const permissions = BigInt(guild.permissions);
+      // Check for ManageGuild permission (0x00000020 = 32)
+      return (permissions & BigInt(32)) === BigInt(32);
+    });
+
+    req.session.user = {
+      ...userInfo,
+      guilds: guilds,
+      adminGuilds: adminGuilds,
+      displayedGuilds: adminGuilds
+    };
+    
+    res.redirect('/selector');
   } catch (err) {
     console.error('OAuth error:', err);
-    res.redirect('/');
+    res.status(500).send(`Authentication failed: ${err.message}`);
   }
 });
 
@@ -280,6 +310,31 @@ app.get('/logout', (req, res) => {
       return res.status(500).send('Failed to logout');
     }
     res.redirect('/setup');
+  });
+});
+
+app.get('/manage/:guildId', ensureAuth, async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check if user has admin access to this guild
+  const guild = req.session.user.displayedGuilds?.find(g => g.id === guildId);
+  if (!guild) {
+    return res.status(403).render('error', {
+      error: 'Access Denied',
+      message: 'You do not have permission to manage this guild.',
+      user: req.session.user
+    });
+  }
+
+  const config = cachedConfig || await getConfig();
+  const inviteLink = botManager.getInviteLink({ permissions: config.invitePermissions });
+  
+  res.render('dashboard', {
+    user: req.session.user,
+    guild: guild,
+    inviteLink,
+    botStatus: botManager.client ? 'online' : 'offline',
+    config: configToView(config)
   });
 });
 

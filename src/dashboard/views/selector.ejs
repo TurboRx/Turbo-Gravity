@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guild Selector - Turbo Gravity</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(10px);
+        }
+
+        .navbar-brand {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .user-name {
+            color: white;
+            font-weight: 500;
+        }
+
+        .logout-btn {
+            padding: 10px 20px;
+            background: rgba(255, 59, 48, 0.8);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 59, 48, 1);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            flex: 1;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .guilds-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .guild-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+        }
+
+        .guild-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .guild-icon-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+        }
+
+        .guild-icon {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .guild-placeholder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+        }
+
+        .guild-info {
+            padding: 20px;
+        }
+
+        .guild-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .guild-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .guild-action {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-manage {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-manage:hover {
+            background: #5568d3;
+        }
+
+        .btn-invite {
+            background: #f3f4f6;
+            color: #333;
+        }
+
+        .btn-invite:hover {
+            background: #e5e7eb;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state h2 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+
+        .empty-state-btn {
+            padding: 12px 30px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .empty-state-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .status-online {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .status-offline {
+            background: rgba(107, 114, 128, 0.2);
+            color: #6b7280;
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                flex-wrap: wrap;
+                padding: 15px 20px;
+            }
+
+            .navbar-right {
+                flex-wrap: wrap;
+                width: 100%;
+                margin-top: 10px;
+            }
+
+            .guilds-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 15px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-brand">🚀 Turbo Gravity</div>
+        <div class="navbar-right">
+            <% if (user) { %>
+            <div class="user-info">
+                <% if (user.avatar) { %>
+                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar">
+                <% } else { %>
+                    <div class="user-avatar" style="background: #667eea; display: flex; align-items: center; justify-content: center; color: white;">
+                        <%= user.username.charAt(0).toUpperCase() %>
+                    </div>
+                <% } %>
+                <span class="user-name"><%= user.username %></span>
+            </div>
+            <% } %>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>Select a Guild</h1>
+            <p>Choose a server to manage</p>
+            <div class="status-badge <%= botStatus === 'online' ? 'status-online' : 'status-offline' %>">
+                Bot Status: <%= botStatus.toUpperCase() %>
+            </div>
+        </div>
+
+        <% if (user && user.displayedGuilds && user.displayedGuilds.length > 0) { %>
+            <div class="guilds-grid">
+                <% user.displayedGuilds.forEach(guild => { %>
+                    <div class="guild-card">
+                        <div class="guild-icon-wrapper">
+                            <% if (guild.icon) { %>
+                                <img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=256" alt="<%= guild.name %>" class="guild-icon">
+                            <% } else { %>
+                                <div class="guild-placeholder">
+                                    <%= guild.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) %>
+                                </div>
+                            <% } %>
+                        </div>
+                        <div class="guild-info">
+                            <div class="guild-name"><%= guild.name %></div>
+                            <div class="guild-stats">
+                                <div class="stat">👥 <%= guild.member_count || '?' %> Members</div>
+                            </div>
+                            <div class="guild-action">
+                                <a href="/manage/<%= guild.id %>" class="btn btn-manage">Manage</a>
+                            </div>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <h2>No Servers Found</h2>
+                <p>You don't have permission to manage any servers yet.</p>
+                <p>Make sure you're logged in with the right Discord account and have the "Manage Server" permission.</p>
+            </div>
+        <% } %>
+    </div>
+</body>
+</html>

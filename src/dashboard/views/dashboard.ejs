@@ -17,6 +17,9 @@
       </div>
     </div>
     <div class="topbar-actions">
+      <% if (guild) { %>
+        <a class="button ghost" href="/selector">← Back to Servers</a>
+      <% } %>
       <button id="theme-toggle" aria-label="Toggle theme">🌙</button>
       <a class="button ghost" href="/control/invite">Invite</a>
       <a class="button ghost" href="/logout">Logout</a>
@@ -28,6 +31,22 @@
   </header>
 
   <main class="page">
+    <% if (guild) { %>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Guild Management</p>
+        <h2><%= guild.name %></h2>
+        <p class="muted">Manage this server's bot settings and commands.</p>
+      </div>
+      <div class="hero-card" style="text-align: center;">
+        <% if (guild.icon) { %>
+          <img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=256" alt="<%= guild.name %>" style="width: 128px; height: 128px; border-radius: 50%; margin-bottom: 16px;">
+        <% } %>
+        <p><strong>Guild ID:</strong> <%= guild.id %></p>
+        <p><strong>Members:</strong> <%= guild.member_count || '?' %></p>
+      </div>
+    </section>
+    <% } else { %>
     <section class="hero">
       <div>
         <p class="eyebrow">Bot Status</p>
@@ -47,6 +66,7 @@
         </div>
       </div>
     </section>
+    <% } %>
 
     <section class="grid two">
       <div class="card">
