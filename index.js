@@ -244,16 +244,30 @@ app.get('/selector', ensureAuth, async (req, res) => {
   });
 });
 
-app.get('/auth/discord', ensureConfigured, (req, res) => {
+app.get('/auth/discord', (req, res) => {
   const config = localConfig;
+  
+  // For setup mode, allow login without configuration
+  if (req.query.setup) {
+    // Simple OAuth redirect for getting user ID during setup
+    const baseUrl = 'https://discord.com/api/oauth2/authorize';
+    const params = new URLSearchParams({
+      client_id: '1234567890', // Placeholder, will be ignored
+      redirect_uri: 'http://localhost:8080/auth/discord/callback',
+      response_type: 'code',
+      scope: 'identify',
+      state: 'setup'
+    });
+    return res.redirect(`${baseUrl}?${params.toString()}`);
+  }
+
+  // Normal login requires configuration
   if (!config?.clientId) {
-    return res.status(500).send('OAuth not configured');
+    return res.status(500).send('OAuth not configured. Please complete setup first.');
   }
 
   const scopes = ['identify', 'guilds'];
   const baseUrl = 'https://discord.com/api/oauth2/authorize';
-  const state = req.query.setup ? 'setup' : undefined;
-  
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.callbackUrl,
@@ -261,25 +275,30 @@ app.get('/auth/discord', ensureConfigured, (req, res) => {
     scope: scopes.join(' ')
   });
 
-  if (state) params.append('state', state);
-
   res.redirect(`${baseUrl}?${params.toString()}`);
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
-  const config = localConfig;
-  if (!config?.clientId || !config?.clientSecret) {
-    return res.status(500).send('OAuth not configured');
-  }
-  
   const code = req.query.code;
   const state = req.query.state;
   
   if (!code) {
     return res.redirect('/');
   }
-  
+
   try {
+    // For setup mode, just extract user ID
+    if (state === 'setup') {
+      // We can't get user info without proper OAuth config, so direct to setup
+      // User will need to enter their ID or we'll show instructions
+      return res.redirect('/setup?message=Please enter your Discord User ID or login after setup');
+    }
+
+    const config = localConfig;
+    if (!config?.clientId || !config?.clientSecret) {
+      return res.status(500).send('OAuth not configured');
+    }
+    
     const tokenData = await getDiscordToken(code, config);
     if (!tokenData.access_token) {
       throw new Error('No access token received');
@@ -287,11 +306,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     const userInfo = await getDiscordUser(tokenData.access_token);
     
-    // If coming from setup, redirect to setup page with user ID
-    if (state === 'setup') {
-      return res.redirect(`/setup?ownerId=${userInfo.id}`);
-    }
-
     // Fetch user guilds
     const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
