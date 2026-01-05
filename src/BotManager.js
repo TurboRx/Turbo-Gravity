@@ -102,30 +102,55 @@ export default class BotManager {
   }
 
   async updateBotProfile({ username, avatar, banner, bio }) {
-    if (!this.client?.user) return;
+    if (!this.client?.user) {
+      // eslint-disable-next-line no-console
+      console.warn('⚠️  Cannot update profile: bot is not running');
+      return;
+    }
     
     try {
       const updateData = {};
       
-      if (username) updateData.username = username;
-      if (bio) updateData.bio = bio;
+      if (username && username.trim()) {
+        updateData.username = username.trim();
+      }
       
-      if (avatar) {
-        // Assume avatar is a data URL or image URL
-        updateData.avatar = avatar;
+      if (bio && bio.trim()) {
+        // Process variables in bio
+        const processedBio = this.processPresenceText(bio.trim());
+        updateData.bio = processedBio;
+      }
+      
+      if (avatar && avatar.trim()) {
+        // Validate URL format
+        try {
+          new URL(avatar);
+          updateData.avatar = avatar.trim();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('❌ Invalid avatar URL:', err.message);
+        }
       }
       
       // Note: banner can only be set via user account, not bot user
-      // We'll store it in config but can't apply it directly
+      // Discord API doesn't support banner for bots currently
+      if (banner) {
+        // eslint-disable-next-line no-console
+        console.log('ℹ️  Banner URL saved but cannot be applied (Discord API limitation)');
+      }
       
       if (Object.keys(updateData).length > 0) {
         await this.client.user.edit(updateData);
         // eslint-disable-next-line no-console
-        console.log('Bot profile updated');
+        console.log('✅ Bot profile updated successfully');
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('ℹ️  No profile changes to apply');
       }
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('Failed to update bot profile:', err.message);
+      console.error('❌ Failed to update bot profile:', err.message);
+      throw err;
     }
   }
 

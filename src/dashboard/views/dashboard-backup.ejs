@@ -287,152 +287,36 @@
       gap: 16px;
     }
 
-    /* Mobile Responsiveness - Optimized for reduced scrolling */
-    @media (max-width: 768px) {
-      body {
-        font-size: 14px;
-      }
-
+    @media (max-width: 600px) {
       .topbar {
         padding: 12px 16px;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-      }
-
-      .brand {
-        justify-content: center;
-      }
-
-      .topbar-actions {
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-      }
-
-      .user-chip {
-        order: -1;
-        justify-content: center;
-        width: 100%;
-      }
-
-      .button {
-        padding: 8px 12px;
-        font-size: 13px;
       }
 
       .container {
-        padding: 12px;
-        max-width: 100%;
+        padding: 16px;
       }
 
       .tabs {
         margin-bottom: 16px;
-        gap: 4px;
-        padding-bottom: 8px;
       }
 
       .tab-button {
-        padding: 10px 12px;
-        font-size: 12px;
-        flex: 1;
-        min-width: fit-content;
+        padding: 10px 16px;
+        font-size: 13px;
       }
 
       .grid {
         grid-template-columns: 1fr;
-        gap: 16px;
       }
 
       .dual {
         grid-template-columns: 1fr;
-        gap: 12px;
       }
 
-      .card {
-        padding: 16px;
-        border-radius: 8px;
-      }
-
-      .card-header h3 {
-        font-size: 15px;
-      }
-
-      .form {
-        gap: 14px;
-      }
-
-      input, textarea, select {
-        padding: 10px;
-        font-size: 14px;
-      }
-
-      textarea {
-        min-height: 70px;
-      }
-
-      .actions {
-        flex-direction: column;
+      .topbar-actions {
+        flex-wrap: wrap;
         gap: 8px;
       }
-
-      .actions .button {
-        width: 100%;
-        text-align: center;
-      }
-
-      .status-chip {
-        padding: 6px 12px;
-        font-size: 13px;
-      }
-
-      .variable-list {
-        grid-template-columns: 1fr;
-        gap: 6px;
-        font-size: 11px;
-      }
-
-      .info-box {
-        padding: 10px;
-        font-size: 12px;
-      }
-
-      .help-text {
-        font-size: 11px;
-      }
-
-      .tooltip-icon:hover::after {
-        white-space: normal;
-        max-width: 200px;
-        word-wrap: break-word;
-      }
-    }
-
-    /* Extra small devices */
-    @media (max-width: 375px) {
-      .topbar {
-        padding: 10px 12px;
-      }
-
-      .container {
-        padding: 8px;
-      }
-
-      .card {
-        padding: 12px;
-      }
-
-      .tab-button {
-        padding: 8px 10px;
-        font-size: 11px;
-      }
-
-      .button {
-        padding: 6px 10px;
-        font-size: 12px;
-      }
-    }
 
       .user-chip {
         font-size: 12px;
@@ -609,48 +493,35 @@
         <div class="card-header">
           <div>
             <p class="eyebrow">Profile Information</p>
-            <h3>Bot Profile <span class="tooltip-icon" data-tooltip="Update bot's name, avatar, banner, and bio">?</span></h3>
+            <h3>Bot Profile <span class="tooltip-icon" data-tooltip="Update bot's name, avatar, and bio">?</span></h3>
           </div>
         </div>
         <form class="form" method="POST" action="/control/profile">
           <label>
             Bot Username
-            <span class="help-text">The bot's display name (2-32 characters)</span>
-            <input type="text" name="username" placeholder="Turbo Gravity" minlength="2" maxlength="32" />
+            <span class="help-text">The bot's display name</span>
+            <input type="text" name="username" placeholder="Turbo Gravity" maxlength="32" />
           </label>
 
           <label>
             Avatar URL
-            <span class="help-text">Direct image URL for bot avatar (PNG/JPG/GIF, recommended 1024x1024)</span>
-            <input type="url" name="avatar" placeholder="https://i.imgur.com/example.png" />
+            <span class="help-text">Direct image URL for bot avatar (PNG/JPG recommended)</span>
+            <input type="url" name="avatar" placeholder="https://..." />
           </label>
 
           <label>
             Banner URL
-            <span class="help-text">Direct image URL for bot banner (PNG/JPG, recommended 600x240)</span>
-            <input type="url" name="banner" placeholder="https://i.imgur.com/example.png" />
+            <span class="help-text">Direct image URL for bot banner</span>
+            <input type="url" name="banner" placeholder="https://..." />
           </label>
 
           <label>
             Bio / Description
-            <span class="help-text">Short description of your bot (up to 190 characters, supports variables)</span>
-            <textarea name="bio" maxlength="190" placeholder="Powerful Discord bot with web control panel. Serving {members} members!"></textarea>
+            <span class="help-text">Short description of your bot (up to 200 characters)</span>
+            <textarea name="bio" maxlength="200" placeholder="Powerful Discord bot with web control panel"></textarea>
           </label>
 
-          <div class="info-box">
-            💡 <strong>Supported Variables:</strong> Use these in your bio and they'll be replaced with live data
-            <div class="variable-list">
-              <div><span class="variable">{members}</span> - Total members</div>
-              <div><span class="variable">{guilds}</span> - Total servers</div>
-              <div><span class="variable">{users}</span> - Total users</div>
-              <div><span class="variable">{botname}</span> - Bot name</div>
-              <div><span class="variable">{servername}</span> - Server name</div>
-              <div><span class="variable">{prefix}</span> - Command prefix (/)</div>
-              <div><span class="variable">{timestamp}</span> - Current time</div>
-            </div>
-          </div>
-
-          <button class="button primary" type="submit">💾 Save Profile</button>
+          <button class="button primary" type="submit">Save Profile</button>
         </form>
       </div>
     </div>
