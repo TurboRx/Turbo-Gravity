@@ -145,26 +145,26 @@ const configToView = config => ({
 
 app.get('/setup', (req, res) => {
   if (configured) return res.redirect('/');
-  res.render('setup');
+  res.render('setup', { ownerId: req.query.ownerId || '' });
 });
 
 app.post('/setup', async (req, res) => {
   try {
-    // Validate required fields
-    if (!req.body.botToken || !req.body.clientId || !req.body.clientSecret || !req.body.mongoUri || !req.body.sessionSecret) {
-      return res.status(400).send('Missing required fields. Please fill in all required information.');
+    // Validate required fields (MongoDB is now optional)
+    if (!req.body.botToken || !req.body.clientId || !req.body.clientSecret || !req.body.sessionSecret) {
+      return res.status(400).send('Missing required fields. Please fill in: Bot Token, Client ID, Client Secret, and Session Secret.');
     }
 
     const newConfig = {
       botToken: req.body.botToken,
       clientId: req.body.clientId,
       clientSecret: req.body.clientSecret,
-      callbackUrl: req.body.callbackUrl || 'http://localhost:3000/auth/discord/callback',
+      callbackUrl: req.body.callbackUrl || 'http://localhost:8080/auth/discord/callback',
       guildId: req.body.guildId || '',
-      mongoUri: req.body.mongoUri,
+      mongoUri: req.body.mongoUri || '', // MongoDB is optional
       sessionSecret: req.body.sessionSecret,
       adminIds: req.body.adminIds || '',
-      port: Number.parseInt(req.body.port, 10) || 3000,
+      port: Number.parseInt(req.body.port, 10) || 8080,
       autoStart: req.body.autoStart === 'on',
       presenceText: req.body.presenceText || 'Ready to serve',
       presenceType: Number.parseInt(req.body.presenceType, 10) || 0,
@@ -252,12 +252,16 @@ app.get('/auth/discord', ensureConfigured, (req, res) => {
 
   const scopes = ['identify', 'guilds'];
   const baseUrl = 'https://discord.com/api/oauth2/authorize';
+  const state = req.query.setup ? 'setup' : undefined;
+  
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.callbackUrl,
     response_type: 'code',
     scope: scopes.join(' ')
   });
+
+  if (state) params.append('state', state);
 
   res.redirect(`${baseUrl}?${params.toString()}`);
 });
@@ -283,6 +287,11 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     const userInfo = await getDiscordUser(tokenData.access_token);
     
+    // If coming from setup, redirect to setup page with user ID
+    if (state === 'setup') {
+      return res.redirect(`/setup?ownerId=${userInfo.id}`);
+    }
+
     // Fetch user guilds
     const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }

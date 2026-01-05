@@ -35,18 +35,22 @@
           <label>OAuth Callback URL
             <input type="url" name="callbackUrl" value="http://localhost:8080/auth/discord/callback" required />
           </label>
+          <p style="font-size: 12px; color: #999; margin-top: 8px;">
+            💡 Or login with Discord to auto-fill your user ID as admin:
+            <a href="/auth/discord?setup=true" style="color: #0ea5e9; text-decoration: underline;">Login with Discord</a>
+          </p>
         </div>
 
         <div class="form-section">
-          <h3>Database & Security</h3>
-          <label>MongoDB URI
-            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" required />
+          <h3>Database & Security (MongoDB Optional)</h3>
+          <label>MongoDB URI (optional - leave empty to use file storage)
+            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" />
           </label>
           <label>Session Secret
             <input type="password" name="sessionSecret" placeholder="Random secure string" required />
           </label>
           <label>Admin User IDs (comma-separated)
-            <input type="text" name="adminIds" placeholder="123456789,987654321" required />
+            <input type="text" name="adminIds" placeholder="123456789,987654321" value="<%= ownerId || '' %>" required />
           </label>
         </div>
 

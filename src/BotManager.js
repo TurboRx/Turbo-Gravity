@@ -94,10 +94,25 @@ export default class BotManager {
     });
 
     this.client.commands = this.commands;
+    this.autoRestartAttempts = 0;
+    this.maxAutoRestartAttempts = 5;
+    
     this.client.once('ready', () => {
       this.client.user.setPresence(this.defaultPresence);
+      this.autoRestartAttempts = 0; // Reset counter on successful connection
       // eslint-disable-next-line no-console
       console.log(`Logged in as ${this.client.user.tag}`);
+    });
+
+    this.client.on('disconnect', () => {
+      // eslint-disable-next-line no-console
+      console.warn('Bot disconnected, attempting auto-restart...');
+      this.autoRestart();
+    });
+
+    this.client.on('error', err => {
+      // eslint-disable-next-line no-console
+      console.error('Client error:', err);
     });
 
     this.client.on('interactionCreate', async interaction => {
@@ -119,6 +134,30 @@ export default class BotManager {
 
     await this.loadCommands();
     await this.client.login(this.token);
+  }
+
+  async autoRestart() {
+    if (this.autoRestartAttempts >= this.maxAutoRestartAttempts) {
+      // eslint-disable-next-line no-console
+      console.error(`Max auto-restart attempts (${this.maxAutoRestartAttempts}) reached. Manual restart required.`);
+      return;
+    }
+
+    this.autoRestartAttempts++;
+    const delay = Math.pow(2, this.autoRestartAttempts) * 1000; // Exponential backoff
+    
+    // eslint-disable-next-line no-console
+    console.log(`Auto-restart attempt ${this.autoRestartAttempts}/${this.maxAutoRestartAttempts} in ${delay}ms...`);
+    
+    setTimeout(async () => {
+      try {
+        await this.restart();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Auto-restart failed:', err);
+        this.autoRestart();
+      }
+    }, delay);
   }
 
   async connectMongo() {
