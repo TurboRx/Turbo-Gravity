@@ -98,8 +98,6 @@ Copy `.env.example` to `.env` and fill values (settings will still be imported i
 ### Bot Commands
 All commands are slash commands (`/`). Once the bot is running, they'll be registered automatically based on your scope setting (guild or global).
 
-Example: `/kick @user reason:spamming`
-
 ---
 
 ## Docker Deployment
