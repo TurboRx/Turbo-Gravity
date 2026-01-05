@@ -41,10 +41,16 @@ export default class BotManager {
   async start() {
     if (this.client) return this.client;
 
+    // Validate configuration before starting
+    if (!this.token) {
+      throw new Error('Missing DISCORD_TOKEN. Please configure the bot token in setup.');
+    }
+    if (!this.clientId) {
+      throw new Error('Missing DISCORD_CLIENT_ID. Please configure the client ID in setup.');
+    }
+
     await this.connectMongo();
     await this.ensureConfig();
-
-    if (!this.token) throw new Error('Missing DISCORD_TOKEN');
 
     await this.buildClient();
     await this.registerCommands();
@@ -96,30 +102,50 @@ export default class BotManager {
   }
 
   async updateBotProfile({ username, avatar, banner, bio }) {
-    if (!this.client?.user) return;
+    if (!this.client?.user) {
+      // eslint-disable-next-line no-console
+      console.warn('⚠️  Cannot update profile: bot is not running');
+      return;
+    }
     
     try {
       const updateData = {};
       
-      if (username) updateData.username = username;
-      if (bio) updateData.bio = bio;
-      
-      if (avatar) {
-        // Assume avatar is a data URL or image URL
-        updateData.avatar = avatar;
+      if (username && username.trim()) {
+        updateData.username = username.trim();
       }
       
-      // Note: banner can only be set via user account, not bot user
-      // We'll store it in config but can't apply it directly
+      if (bio && bio.trim()) {
+        // Process variables in bio
+        const processedBio = this.processPresenceText(bio.trim());
+        updateData.bio = processedBio;
+      }
+      
+      if (avatar && avatar.trim()) {
+        // Validate URL format using regex for better performance
+        const urlPattern = /^https?:\/\/.+\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i;
+        if (urlPattern.test(avatar.trim())) {
+          updateData.avatar = avatar.trim();
+        } else {
+          // eslint-disable-next-line no-console
+          console.error('❌ Invalid avatar URL format. Must be a valid image URL (PNG/JPG/JPEG/GIF/WEBP)');
+        }
+      }
+      
+      // Banner is not supported by Discord API for bots - ignore silently
       
       if (Object.keys(updateData).length > 0) {
         await this.client.user.edit(updateData);
         // eslint-disable-next-line no-console
-        console.log('Bot profile updated');
+        console.log('✅ Bot profile updated successfully');
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('ℹ️  No profile changes to apply');
       }
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('Failed to update bot profile:', err.message);
+      console.error('❌ Failed to update bot profile:', err.message);
+      throw err;
     }
   }
 
@@ -152,18 +178,23 @@ export default class BotManager {
       this.client.user.setPresence(this.defaultPresence);
       this.autoRestartAttempts = 0; // Reset counter on successful connection
       // eslint-disable-next-line no-console
-      console.log(`Logged in as ${this.client.user.tag}`);
+      console.log(`✅ Bot logged in as ${this.client.user.tag}`);
     });
 
     this.client.on('disconnect', () => {
       // eslint-disable-next-line no-console
-      console.warn('Bot disconnected, attempting auto-restart...');
+      console.warn('⚠️  Bot disconnected, attempting auto-restart...');
       this.autoRestart();
     });
 
     this.client.on('error', err => {
       // eslint-disable-next-line no-console
-      console.error('Client error:', err);
+      console.error('❌ Client error:', err);
+    });
+
+    this.client.on('shardError', err => {
+      // eslint-disable-next-line no-console
+      console.error('❌ Shard error:', err);
     });
 
     this.client.on('interactionCreate', async interaction => {
@@ -175,16 +206,29 @@ export default class BotManager {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('Command error:', err);
-        if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content: 'Error executing command.', ephemeral: true });
-        } else {
-          await interaction.reply({ content: 'Error executing command.', ephemeral: true });
+        const errorMessage = { content: 'An error occurred while executing this command.', ephemeral: true };
+        try {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.followUp(errorMessage);
+          } else {
+            await interaction.reply(errorMessage);
+          }
+        } catch (replyErr) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to send error message:', replyErr);
         }
       }
     });
 
     await this.loadCommands();
-    await this.client.login(this.token);
+    
+    try {
+      await this.client.login(this.token);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('❌ Failed to login to Discord:', err.message);
+      throw new Error(`Discord login failed: ${err.message}. Please check your bot token.`);
+    }
   }
 
   async autoRestart() {
@@ -214,7 +258,16 @@ export default class BotManager {
   async connectMongo() {
     if (!this.mongoUri) return;
     if (mongoose.connection.readyState === 1) return;
-    await mongoose.connect(this.mongoUri);
+    
+    try {
+      await mongoose.connect(this.mongoUri);
+      // eslint-disable-next-line no-console
+      console.log('✅ MongoDB connected');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('❌ MongoDB connection failed:', err.message);
+      throw err;
+    }
   }
 
   async loadCommands() {
@@ -236,16 +289,36 @@ export default class BotManager {
   }
 
   async registerCommands() {
-    if (!this.clientId || !this.token) return;
+    if (!this.clientId || !this.token) {
+      // eslint-disable-next-line no-console
+      console.warn('⚠️  Skipping command registration: missing clientId or token');
+      return;
+    }
+    
     const rest = new REST({ version: '10' }).setToken(this.token);
     this.rest = rest;
     const body = Array.from(this.commands.values()).map(cmd => cmd.data.toJSON());
-    if (body.length === 0) return;
+    
+    if (body.length === 0) {
+      // eslint-disable-next-line no-console
+      console.log('ℹ️  No commands to register');
+      return;
+    }
 
-    if (this.commandScope === 'guild' && this.guildId) {
-      await rest.put(Routes.applicationGuildCommands(this.clientId, this.guildId), { body });
-    } else {
-      await rest.put(Routes.applicationCommands(this.clientId), { body });
+    try {
+      if (this.commandScope === 'guild' && this.guildId) {
+        await rest.put(Routes.applicationGuildCommands(this.clientId, this.guildId), { body });
+        // eslint-disable-next-line no-console
+        console.log(`✅ Registered ${body.length} guild commands for guild ${this.guildId}`);
+      } else {
+        await rest.put(Routes.applicationCommands(this.clientId), { body });
+        // eslint-disable-next-line no-console
+        console.log(`✅ Registered ${body.length} global commands`);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('❌ Failed to register commands:', err.message);
+      throw err;
     }
   }
 

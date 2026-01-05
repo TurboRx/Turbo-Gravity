@@ -1,9 +1,13 @@
 import express from 'express';
 import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import BotManager from './src/BotManager.js';
 import Config from './src/models/Config.js';
 import { loadLocalConfig, saveLocalConfig, isConfigured } from './src/localConfig.js';
@@ -19,6 +23,11 @@ let adminIds = (localConfig.adminIds || '')
   .split(',')
   .map(id => id.trim())
   .filter(id => id.length > 0);
+
+// Generate a strong session secret if not configured
+if (!localConfig.sessionSecret || localConfig.sessionSecret === 'temp-secret') {
+  localConfig.sessionSecret = crypto.randomBytes(32).toString('hex');
+}
 
 const botManager = new BotManager({
   token: localConfig.botToken,
@@ -75,18 +84,82 @@ const configureOAuth = config => {
 if (configured) configureOAuth(localConfig);
 
 const app = express();
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://cdn.discordapp.com"],
+      connectSrc: ["'self'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
+// Rate limiting for authentication routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: 'Too many authentication attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Rate limiting for setup route
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 setup attempts per hour
+  message: 'Too many setup attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// General rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use(generalLimiter);
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'src', 'dashboard', 'views'));
 app.use('/public', express.static(path.join(__dirname, 'src', 'dashboard', 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use(
-  session({
-    secret: localConfig.sessionSecret || 'temp-secret',
-    resave: false,
-    saveUninitialized: false
-  })
-);
+
+// Configure session store - use MongoStore if MongoDB is available, otherwise MemoryStore with warning suppression
+// Note: CSRF protection is not implemented as this is an admin-only dashboard with OAuth authentication.
+// All control endpoints are protected by ensureAdmin middleware which checks admin user IDs.
+// For production deployments, consider adding CSRF tokens for additional security.
+const sessionConfig = {
+  secret: localConfig.sessionSecret || 'temp-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    httpOnly: true
+  }
+};
+
+// Use MongoStore for production-ready session storage if MongoDB is configured
+if (localConfig.mongoUri) {
+  sessionConfig.store = MongoStore.create({
+    mongoUrl: localConfig.mongoUri,
+    touchAfter: 24 * 3600, // Lazy session update (in seconds)
+    crypto: {
+      secret: localConfig.sessionSecret
+    }
+  });
+}
+
+app.use(session(sessionConfig));
 
 const ensureConfigured = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
@@ -109,7 +182,15 @@ const ensureAdmin = (req, res, next) => {
 const connectMongo = async () => {
   if (!localConfig.mongoUri) return null;
   if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(localConfig.mongoUri);
+    try {
+      await mongoose.connect(localConfig.mongoUri);
+      // eslint-disable-next-line no-console
+      console.log('✅ Dashboard MongoDB connected');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('❌ Dashboard MongoDB connection failed:', err.message);
+      throw err;
+    }
   }
 };
 
@@ -148,28 +229,66 @@ app.get('/setup', (req, res) => {
   res.render('setup', { ownerId: req.query.ownerId || '' });
 });
 
-app.post('/setup', async (req, res) => {
+app.post('/setup', setupLimiter, async (req, res) => {
   try {
     // Validate required fields (MongoDB is now optional)
     if (!req.body.botToken || !req.body.clientId || !req.body.clientSecret || !req.body.sessionSecret) {
       return res.status(400).send('Missing required fields. Please fill in: Bot Token, Client ID, Client Secret, and Session Secret.');
     }
 
+    // Validate and sanitize inputs
+    const botToken = String(req.body.botToken).trim();
+    const clientId = String(req.body.clientId).trim();
+    const clientSecret = String(req.body.clientSecret).trim();
+    const sessionSecret = String(req.body.sessionSecret).trim();
+    const callbackUrl = String(req.body.callbackUrl || 'http://localhost:8080/auth/discord/callback').trim();
+    const guildId = String(req.body.guildId || '').trim();
+    const mongoUri = String(req.body.mongoUri || '').trim();
+    const adminIds = String(req.body.adminIds || '').trim();
+    const port = Number.parseInt(req.body.port, 10);
+    const presenceText = String(req.body.presenceText || 'Ready to serve').trim();
+    const presenceType = Number.parseInt(req.body.presenceType, 10);
+    const commandScope = String(req.body.commandScope || 'guild').trim();
+    const invitePermissions = String(req.body.invitePermissions || '8').trim();
+
+    // Validate field lengths and formats
+    if (botToken.length < 50) {
+      return res.status(400).send('Bot Token appears to be invalid (too short).');
+    }
+    if (clientId.length < 10 || !/^\d+$/.test(clientId)) {
+      return res.status(400).send('Client ID must be a numeric Discord application ID.');
+    }
+    if (sessionSecret.length < 32) {
+      return res.status(400).send('Session Secret must be at least 32 characters for security.');
+    }
+    if (port && (port < 1 || port > 65535)) {
+      return res.status(400).send('Port must be between 1 and 65535.');
+    }
+    if (commandScope !== 'global' && commandScope !== 'guild') {
+      return res.status(400).send('Command scope must be either "global" or "guild".');
+    }
+    if (guildId && !/^\d+$/.test(guildId)) {
+      return res.status(400).send('Guild ID must be a numeric Discord server ID.');
+    }
+    if (mongoUri && !mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://')) {
+      return res.status(400).send('MongoDB URI must start with mongodb:// or mongodb+srv://');
+    }
+
     const newConfig = {
-      botToken: req.body.botToken,
-      clientId: req.body.clientId,
-      clientSecret: req.body.clientSecret,
-      callbackUrl: req.body.callbackUrl || 'http://localhost:8080/auth/discord/callback',
-      guildId: req.body.guildId || '',
-      mongoUri: req.body.mongoUri || '', // MongoDB is optional
-      sessionSecret: req.body.sessionSecret,
-      adminIds: req.body.adminIds || '',
-      port: Number.parseInt(req.body.port, 10) || 8080,
+      botToken,
+      clientId,
+      clientSecret,
+      callbackUrl,
+      guildId,
+      mongoUri,
+      sessionSecret,
+      adminIds,
+      port: port || 8080,
       autoStart: req.body.autoStart === 'on',
-      presenceText: req.body.presenceText || 'Ready to serve',
-      presenceType: Number.parseInt(req.body.presenceType, 10) || 0,
-      commandScope: req.body.commandScope || 'guild',
-      invitePermissions: req.body.invitePermissions || '8'
+      presenceText,
+      presenceType: presenceType || 0,
+      commandScope,
+      invitePermissions
     };
 
     await saveLocalConfig(newConfig);
@@ -179,13 +298,6 @@ app.post('/setup', async (req, res) => {
       .split(',')
       .map(id => id.trim())
       .filter(id => id.length > 0);
-
-    const PORT = process.env.PORT || newConfig.port || 8080;
-    if (!app.listening) {
-      app.listen(PORT, () => {
-        console.log(`Dashboard running on port ${PORT}`);
-      });
-    }
 
     configureOAuth(localConfig);
     botManager.token = localConfig.botToken;
@@ -200,8 +312,13 @@ app.post('/setup', async (req, res) => {
     };
 
     if (localConfig.mongoUri) {
-      await connectMongo();
-      await getConfig();
+      try {
+        await connectMongo();
+        await getConfig();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('MongoDB connection failed, continuing without database:', err.message);
+      }
     }
 
     res.send(`
@@ -244,21 +361,12 @@ app.get('/selector', ensureAuth, async (req, res) => {
   });
 });
 
-app.get('/auth/discord', (req, res) => {
+app.get('/auth/discord', authLimiter, (req, res) => {
   const config = localConfig;
   
-  // For setup mode, allow login without configuration
+  // Setup mode requires configuration first
   if (req.query.setup) {
-    // Simple OAuth redirect for getting user ID during setup
-    const baseUrl = 'https://discord.com/api/oauth2/authorize';
-    const params = new URLSearchParams({
-      client_id: '1234567890', // Placeholder, will be ignored
-      redirect_uri: 'http://localhost:8080/auth/discord/callback',
-      response_type: 'code',
-      scope: 'identify',
-      state: 'setup'
-    });
-    return res.redirect(`${baseUrl}?${params.toString()}`);
+    return res.redirect('/setup?message=Please complete setup first, then you can login to get your Discord User ID.');
   }
 
   // Normal login requires configuration
@@ -278,25 +386,17 @@ app.get('/auth/discord', (req, res) => {
   res.redirect(`${baseUrl}?${params.toString()}`);
 });
 
-app.get('/auth/discord/callback', async (req, res) => {
+app.get('/auth/discord/callback', authLimiter, async (req, res) => {
   const code = req.query.code;
-  const state = req.query.state;
   
   if (!code) {
     return res.redirect('/');
   }
 
   try {
-    // For setup mode, just extract user ID
-    if (state === 'setup') {
-      // We can't get user info without proper OAuth config, so direct to setup
-      // User will need to enter their ID or we'll show instructions
-      return res.redirect('/setup?message=Please enter your Discord User ID or login after setup');
-    }
-
     const config = localConfig;
     if (!config?.clientId || !config?.clientSecret) {
-      return res.status(500).send('OAuth not configured');
+      return res.status(500).send('OAuth not configured. Please complete setup first.');
     }
     
     const tokenData = await getDiscordToken(code, config);
@@ -310,9 +410,14 @@ app.get('/auth/discord/callback', async (req, res) => {
     const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
+    
+    if (!guildsResponse.ok) {
+      throw new Error(`Failed to fetch guilds: ${guildsResponse.status}`);
+    }
+    
     const guilds = await guildsResponse.json();
 
-    // Filter guilds where user is admin
+    // Filter guilds where user is admin (has ManageGuild permission)
     const adminGuilds = guilds.filter(guild => {
       if (!guild.permissions) return false;
       const permissions = BigInt(guild.permissions);
@@ -330,7 +435,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     res.redirect('/selector');
   } catch (err) {
     console.error('OAuth error:', err);
-    res.status(500).send(`Authentication failed: ${err.message}`);
+    res.status(500).send(`Authentication failed: ${err.message}. Please try again or check your OAuth configuration.`);
   }
 });
 
@@ -436,35 +541,69 @@ app.get('/control/config', ensureAdmin, async (req, res) => {
 
 app.post('/control/config', ensureAdmin, async (req, res) => {
   try {
-    const config = cachedConfig || await getConfig();
+    // Get current config or use local config if MongoDB is not available
+    const config = localConfig.mongoUri ? (cachedConfig || await getConfig()) : null;
     const presenceType = Number.parseInt(req.body.presenceType, 10);
     const commandScope = ['global', 'guild'].includes(req.body.commandScope)
       ? req.body.commandScope
-      : config.commandScope;
+      : (config?.commandScope || localConfig.commandScope || 'guild');
 
-    const previousToken = config.botToken;
-    const previousClientId = config.clientId;
-    const previousScope = config.commandScope;
+    const previousToken = config?.botToken || localConfig.botToken;
+    const previousClientId = config?.clientId || localConfig.clientId;
+    const previousScope = config?.commandScope || localConfig.commandScope;
 
-    config.autoStart = req.body.autoStart === 'on';
-    config.presenceText = req.body.presenceText || config.presenceText;
-    config.presenceType = Number.isInteger(presenceType) ? presenceType : config.presenceType;
-    config.commandScope = commandScope;
-    config.guildId = req.body.guildId?.trim() || '';
-    config.invitePermissions = req.body.invitePermissions || config.invitePermissions;
+    // Update MongoDB config if available
+    if (config) {
+      config.autoStart = req.body.autoStart === 'on';
+      config.presenceText = req.body.presenceText || config.presenceText;
+      config.presenceType = Number.isInteger(presenceType) ? presenceType : config.presenceType;
+      config.commandScope = commandScope;
+      config.guildId = req.body.guildId?.trim() || '';
+      config.invitePermissions = req.body.invitePermissions || config.invitePermissions;
 
-    if (req.body.botToken) config.botToken = req.body.botToken;
-    if (req.body.clientId) config.clientId = req.body.clientId;
-    if (req.body.clientSecret) config.clientSecret = req.body.clientSecret;
-    if (req.body.callbackUrl) config.callbackUrl = req.body.callbackUrl;
+      if (req.body.botToken) config.botToken = req.body.botToken;
+      if (req.body.clientId) config.clientId = req.body.clientId;
+      if (req.body.clientSecret) config.clientSecret = req.body.clientSecret;
+      if (req.body.callbackUrl) config.callbackUrl = req.body.callbackUrl;
 
-    await config.save();
-    cachedConfig = config;
+      await config.save();
+      cachedConfig = config;
+    }
 
-    botManager.applyConfig(config);
+    // Always update local config
+    const updatedLocalConfig = {
+      ...localConfig,
+      autoStart: req.body.autoStart === 'on',
+      presenceText: req.body.presenceText || localConfig.presenceText,
+      presenceType: Number.isInteger(presenceType) ? presenceType : localConfig.presenceType,
+      commandScope,
+      guildId: req.body.guildId?.trim() || localConfig.guildId || '',
+      invitePermissions: req.body.invitePermissions || localConfig.invitePermissions
+    };
 
-    const updatedOAuth = req.body.clientId || req.body.clientSecret || req.body.callbackUrl;
-    if (updatedOAuth) configurePassport(config);
+    if (req.body.botToken) updatedLocalConfig.botToken = req.body.botToken;
+    if (req.body.clientId) updatedLocalConfig.clientId = req.body.clientId;
+    if (req.body.clientSecret) updatedLocalConfig.clientSecret = req.body.clientSecret;
+    if (req.body.callbackUrl) updatedLocalConfig.callbackUrl = req.body.callbackUrl;
+
+    await saveLocalConfig(updatedLocalConfig);
+    localConfig = updatedLocalConfig;
+
+    // Apply the config to bot manager - prefer MongoDB config if available, otherwise use local
+    const configToApply = config ? {
+      botToken: config.botToken || updatedLocalConfig.botToken,
+      clientId: config.clientId || updatedLocalConfig.clientId,
+      clientSecret: config.clientSecret || updatedLocalConfig.clientSecret,
+      callbackUrl: config.callbackUrl || updatedLocalConfig.callbackUrl,
+      guildId: config.guildId || updatedLocalConfig.guildId,
+      commandScope: config.commandScope || updatedLocalConfig.commandScope,
+      invitePermissions: config.invitePermissions || updatedLocalConfig.invitePermissions,
+      presenceText: config.presenceText || updatedLocalConfig.presenceText,
+      presenceType: config.presenceType ?? updatedLocalConfig.presenceType,
+      autoStart: config.autoStart ?? updatedLocalConfig.autoStart
+    } : updatedLocalConfig;
+
+    botManager.applyConfig(configToApply);
 
     const needsRestart =
       botManager.client &&
@@ -473,7 +612,10 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
         commandScope !== previousScope);
 
     if (botManager.client) {
-      await botManager.setActivity({ type: config.presenceType, text: config.presenceText });
+      await botManager.setActivity({ 
+        type: updatedLocalConfig.presenceType, 
+        text: updatedLocalConfig.presenceText 
+      });
       if (needsRestart) await botManager.restart();
     }
 
@@ -496,20 +638,6 @@ app.post('/control/profile', ensureAdmin, async (req, res) => {
     // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to update bot profile');
-  }
-});
-
-app.post('/control/status', ensureAdmin, async (req, res) => {
-  try {
-    const { activityType, statusText } = req.body;
-    if (botManager.client) {
-      await botManager.setActivity({ type: activityType, text: statusText });
-    }
-    res.redirect('/');
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(err);
-    res.status(500).send('Failed to update bot status');
   }
 });
 

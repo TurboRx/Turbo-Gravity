@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turbo Gravity | Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #0ea5e9;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f5f5f5;
+      --text-muted: #999;
+      --bg-dark: #050b18;
+      --bg-card: #0f1419;
+      --border: #1e293b;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #0f1419 0%, #1a202c 100%);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .button.primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .button.primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .button.ghost:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .button.success {
+      background: var(--success);
+      color: white;
+    }
+
+    .button.danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .user-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .pill {
+      background: var(--primary);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-button {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-button.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-button:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--primary);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .card-header h3 {
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .card-header .eyebrow {
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    input, textarea, select {
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(14, 165, 233, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .tooltip-icon {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 16px;
+      font-size: 12px;
+      cursor: help;
+      position: relative;
+    }
+
+    .tooltip-icon:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      font-size: 12px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    .dual {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    /* Mobile Responsiveness - Optimized for reduced scrolling */
+    @media (max-width: 768px) {
+      body {
+        font-size: 14px;
+      }
+
+      .topbar {
+        padding: 12px 16px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+
+      .brand {
+        justify-content: center;
+      }
+
+      .topbar-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .user-chip {
+        order: -1;
+        justify-content: center;
+        width: 100%;
+      }
+
+      .button {
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+
+      .container {
+        padding: 12px;
+        max-width: 100%;
+      }
+
+      .tabs {
+        margin-bottom: 16px;
+        gap: 4px;
+        padding-bottom: 8px;
+      }
+
+      .tab-button {
+        padding: 10px 12px;
+        font-size: 12px;
+        flex: 1;
+        min-width: fit-content;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .dual {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .card {
+        padding: 16px;
+        border-radius: 8px;
+      }
+
+      .card-header h3 {
+        font-size: 15px;
+      }
+
+      .form {
+        gap: 14px;
+      }
+
+      input, textarea, select {
+        padding: 10px;
+        font-size: 14px;
+      }
+
+      textarea {
+        min-height: 70px;
+      }
+
+      .actions {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .actions .button {
+        width: 100%;
+        text-align: center;
+      }
+
+      .status-chip {
+        padding: 6px 12px;
+        font-size: 13px;
+      }
+
+      .variable-list {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        font-size: 11px;
+      }
+
+      .info-box {
+        padding: 10px;
+        font-size: 12px;
+      }
+
+      .help-text {
+        font-size: 11px;
+      }
+
+      .tooltip-icon:hover::after {
+        white-space: normal;
+        max-width: 200px;
+        word-wrap: break-word;
+      }
+    }
+
+    /* Extra small devices */
+    @media (max-width: 375px) {
+      .topbar {
+        padding: 10px 12px;
+      }
+
+      .container {
+        padding: 8px;
+      }
+
+      .card {
+        padding: 12px;
+      }
+
+      .tab-button {
+        padding: 8px 10px;
+        font-size: 11px;
+      }
+
+      .button {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+    }
+
+      .user-chip {
+        font-size: 12px;
+      }
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+    }
+
+    .status-chip.offline {
+      background: rgba(107, 114, 128, 0.1);
+      color: var(--text-muted);
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox input {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .actions form {
+      display: flex;
+    }
+
+    .info-box {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .variable-list {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+    }
+
+    .variable {
+      font-family: monospace;
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div style="font-size: 20px;">🚀</div>
+      <div>
+        <h1 style="font-size: 16px; margin: 0;">Turbo Gravity</h1>
+        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Control Panel</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <% if (guild) { %>
+        <a class="button ghost" href="/selector">← Back</a>
+      <% } %>
+      <button class="button ghost" id="theme-toggle">🌙</button>
+      <a class="button ghost" href="/control/invite">Invite</a>
+      <a class="button ghost" href="/logout">Logout</a>
+      <div class="user-chip">
+        <span><%= user.username %></span>
+        <span class="pill">Admin</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-button active" onclick="switchTab(event, 'bot-status')">
+        Bot Status
+      </button>
+      <button class="tab-button" onclick="switchTab(event, 'bot-profile')">
+        Profile
+      </button>
+      <button class="tab-button" onclick="switchTab(event, 'presence')">
+        Presence
+      </button>
+      <button class="tab-button" onclick="switchTab(event, 'settings')">
+        Settings
+      </button>
+    </div>
+
+    <!-- Bot Status Tab -->
+    <div id="bot-status" class="tab-content active">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Current Status</p>
+              <h3>Bot Health</h3>
+            </div>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <span class="status-chip <%= botStatus === 'online' ? '' : 'offline' %>">
+              <span class="pulse"></span>
+              <%= botStatus.toUpperCase() %>
+            </span>
+          </div>
+          <p class="help-text">Status: <%= botStatus === 'online' ? 'Bot is connected and ready' : 'Bot is not connected' %></p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Quick Actions</p>
+              <h3>Bot Control</h3>
+            </div>
+          </div>
+          <div class="actions">
+            <form method="POST" action="/control/start">
+              <button class="button success" type="submit">Start</button>
+            </form>
+            <form method="POST" action="/control/stop">
+              <button class="button danger" type="submit">Stop</button>
+            </form>
+            <form method="POST" action="/control/restart">
+              <button class="button primary" type="submit">Restart</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bot Profile Tab -->
+    <div id="bot-profile" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Profile Information</p>
+            <h3>Bot Profile <span class="tooltip-icon" data-tooltip="Update bot's name, avatar, banner, and bio">?</span></h3>
+          </div>
+        </div>
+        <form class="form" method="POST" action="/control/profile">
+          <label>
+            Bot Username
+            <span class="help-text">The bot's display name (2-32 characters)</span>
+            <input 
+              type="text" 
+              name="username" 
+              placeholder="Turbo Gravity" 
+              minlength="2" 
+              maxlength="32" 
+              pattern="[^\@\#\:\d].{1,31}"
+              title="Username must be 2-32 characters and cannot start with @, #, :, or a number"
+            />
+          </label>
+
+          <label>
+            Avatar URL
+            <span class="help-text">Direct image URL for bot avatar (PNG/JPG/GIF, recommended 1024x1024)</span>
+            <input type="url" name="avatar" placeholder="https://i.imgur.com/example.png" />
+          </label>
+
+          <label>
+            Banner URL
+            <span class="help-text">⚠️ Banner URL for reference only (Discord API doesn't support bot banners yet)</span>
+            <input type="url" name="banner" placeholder="https://i.imgur.com/example.png" disabled title="Banner is not yet supported by Discord for bot users" />
+          </label>
+
+          <label>
+            Bio / Description
+            <span class="help-text">Short description of your bot (up to 190 characters, supports variables)</span>
+            <textarea name="bio" maxlength="190" placeholder="Powerful Discord bot with web control panel. Serving {members} members!"></textarea>
+          </label>
+
+          <div class="info-box">
+            💡 <strong>Supported Variables:</strong> Use these in your bio and they'll be replaced with live data
+            <div class="variable-list">
+              <div><span class="variable">{members}</span> - Total members</div>
+              <div><span class="variable">{guilds}</span> - Total servers</div>
+              <div><span class="variable">{users}</span> - Total users</div>
+              <div><span class="variable">{botname}</span> - Bot name</div>
+              <div><span class="variable">{servername}</span> - Server name</div>
+              <div><span class="variable">{prefix}</span> - Command prefix (/)</div>
+              <div><span class="variable">{timestamp}</span> - Current time</div>
+            </div>
+          </div>
+
+          <button class="button primary" type="submit">💾 Save Profile</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Presence Tab -->
+    <div id="presence" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Bot Presence</p>
+            <h3>Status & Activity <span class="tooltip-icon" data-tooltip="Controls what shows under bot name in Discord">?</span></h3>
+          </div>
+        </div>
+        <form class="form" method="POST" action="/control/status">
+          <div class="dual">
+            <label>
+              Activity Type
+              <span class="help-text">What the bot appears to be doing</span>
+              <select name="activityType">
+                <option value="0">Playing</option>
+                <option value="2">Listening to</option>
+                <option value="3">Watching</option>
+                <option value="5">Competing in</option>
+              </select>
+            </label>
+
+            <label>
+              Status Text
+              <span class="help-text">The activity message (supports variables)</span>
+              <input type="text" name="statusText" placeholder="Playing with APIs" required />
+            </label>
+          </div>
+
+          <div class="info-box">
+            💡 <strong>Supported Variables:</strong> Use these in your status text and they'll be replaced with live data
+            <div class="variable-list">
+              <div><span class="variable">{members}</span> - Total members</div>
+              <div><span class="variable">{guilds}</span> - Total servers</div>
+              <div><span class="variable">{users}</span> - Total users</div>
+              <div><span class="variable">{botname}</span> - Bot name</div>
+              <div><span class="variable">{servername}</span> - Server name</div>
+              <div><span class="variable">{prefix}</span> - Prefix (/)</div>
+              <div><span class="variable">{timestamp}</span> - Current time</div>
+            </div>
+          </div>
+
+          <button class="button primary" type="submit">Save Presence</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings" class="tab-content">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Bot Settings</p>
+              <h3>Configuration <span class="tooltip-icon" data-tooltip="General bot settings">?</span></h3>
+            </div>
+          </div>
+          <form class="form" method="POST" action="/control/config">
+            <label class="checkbox">
+              <input type="checkbox" name="autoStart" <%= config?.autoStart ? 'checked' : '' %> />
+              <span>Auto-start bot on launch</span>
+            </label>
+            <span class="help-text">Automatically start the bot when dashboard launches</span>
+
+            <label>
+              Command Scope
+              <span class="help-text">Guild (instant) or Global (up to 1 hour cache)</span>
+              <select name="commandScope">
+                <option value="guild" <%= config?.commandScope === 'guild' ? 'selected' : '' %>>Guild (Fastest)</option>
+                <option value="global" <%= config?.commandScope === 'global' ? 'selected' : '' %>>Global</option>
+              </select>
+            </label>
+
+            <label>
+              Guild ID (Optional)
+              <span class="help-text">For guild-only command registration</span>
+              <input type="text" name="guildId" value="<%= config?.guildId || '' %>" placeholder="Optional" />
+            </label>
+
+            <label>
+              Invite Permissions
+              <span class="help-text">Permission integer for invite link (8 = administrator)</span>
+              <input type="text" name="invitePermissions" value="<%= config?.invitePermissions || '8' %>" />
+            </label>
+
+            <button class="button primary" type="submit">Save Settings</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Invite Link</p>
+              <h3>Add Bot to Server <span class="tooltip-icon" data-tooltip="Share this link to invite bot to other servers">?</span></h3>
+            </div>
+          </div>
+          <p class="help-text">Share this link to invite the bot to your servers:</p>
+          <div style="word-break: break-all; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-top: 12px; font-size: 12px;">
+            <a href="<%= inviteLink %>" target="_blank" style="color: var(--primary); text-decoration: none;">
+              <%= inviteLink %>
+            </a>
+          </div>
+          <a class="button primary" href="<%= inviteLink %>" target="_blank" style="margin-top: 12px;">Open Invite Link</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(event, tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+
+      // Remove active class from all buttons
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      // Show selected tab
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Theme toggle
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+    });
+  </script>
+</body>
+</html>

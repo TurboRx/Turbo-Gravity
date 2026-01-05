@@ -45,11 +45,11 @@ export async function saveLocalConfig(config) {
 }
 
 export function isConfigured(config) {
+  // MongoDB is optional, so we don't require mongoUri
   return !!(
     config.botToken &&
     config.clientId &&
     config.clientSecret &&
-    config.sessionSecret &&
-    config.mongoUri
+    config.sessionSecret
   );
 }
