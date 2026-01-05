@@ -471,6 +471,34 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
   }
 });
 
+app.post('/control/profile', ensureAdmin, async (req, res) => {
+  try {
+    if (botManager.client) {
+      const { username, avatar, banner, bio } = req.body;
+      await botManager.updateBotProfile({ username, avatar, banner, bio });
+    }
+    res.redirect('/');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).send('Failed to update bot profile');
+  }
+});
+
+app.post('/control/status', ensureAdmin, async (req, res) => {
+  try {
+    const { activityType, statusText } = req.body;
+    if (botManager.client) {
+      await botManager.setActivity({ type: activityType, text: statusText });
+    }
+    res.redirect('/');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).send('Failed to update bot status');
+  }
+});
+
 const bootstrap = async () => {
   if (configured) {
     configureOAuth(localConfig);

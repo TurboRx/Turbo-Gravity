@@ -66,10 +66,61 @@ export default class BotManager {
 
   async setActivity({ type, text }) {
     if (!this.client) return;
+    
+    // Replace variables in presence text
+    const processedText = this.processPresenceText(text);
+    
     this.client.user.setPresence({
-      activities: [{ name: text || 'online', type: Number(type) || 0 }],
+      activities: [{ name: processedText || 'online', type: Number(type) || 0 }],
       status: 'online'
     });
+  }
+
+  processPresenceText(text) {
+    if (!text || !this.client) return text;
+    
+    let processed = text;
+    const guild = this.client.guilds.cache.first();
+    
+    // Replace variables
+    processed = processed
+      .replace(/{members}/gi, this.client.users.cache.size.toString())
+      .replace(/{guilds}/gi, this.client.guilds.cache.size.toString())
+      .replace(/{users}/gi, this.client.users.cache.size.toString())
+      .replace(/{botname}/gi, this.client.user.username)
+      .replace(/{servername}/gi, guild?.name || 'Discord')
+      .replace(/{prefix}/gi, '/')
+      .replace(/{timestamp}/gi, new Date().toLocaleString());
+    
+    return processed;
+  }
+
+  async updateBotProfile({ username, avatar, banner, bio }) {
+    if (!this.client?.user) return;
+    
+    try {
+      const updateData = {};
+      
+      if (username) updateData.username = username;
+      if (bio) updateData.bio = bio;
+      
+      if (avatar) {
+        // Assume avatar is a data URL or image URL
+        updateData.avatar = avatar;
+      }
+      
+      // Note: banner can only be set via user account, not bot user
+      // We'll store it in config but can't apply it directly
+      
+      if (Object.keys(updateData).length > 0) {
+        await this.client.user.edit(updateData);
+        // eslint-disable-next-line no-console
+        console.log('Bot profile updated');
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to update bot profile:', err.message);
+    }
   }
 
   getInviteLink({ permissions, scopes = ['bot', 'applications.commands'] } = {}) {
