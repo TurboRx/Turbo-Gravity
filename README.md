@@ -182,7 +182,15 @@ export default {
 
 ## Contributing
 
-Pull requests are welcome! For major changes, please open an issue first to discuss what you'd like to change.
+We welcome contributions from the community! Whether you're fixing bugs, adding features, improving documentation, or suggesting enhancements, your help is appreciated.
+
+Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
+- How to set up your development environment
+- Our code style and commit guidelines
+- The pull request process
+- How to report bugs and suggest features
+
+For major changes, please open an issue first to discuss what you'd like to change.
 
 ---
 
