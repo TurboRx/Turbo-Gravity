@@ -196,4 +196,4 @@ For major changes, please open an issue first to discuss what you'd like to chan
 
 ## Support
 
-For issues or questions, open an issue on [GitHub](https://github.com/TurboRx/Turbo-Gravity-/issues).
+For issues or questions, open an issue on [GitHub](https://github.com/TurboRx/Turbo-Gravity/issues).
