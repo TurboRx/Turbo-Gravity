@@ -19,6 +19,7 @@
       </div>
 
       <form class="form setup-form" method="POST" action="/setup">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="form-section">
           <h3>Discord Bot Credentials</h3>
           <label>Bot Token

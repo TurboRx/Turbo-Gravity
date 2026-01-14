@@ -8,6 +8,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { doubleCsrf } from 'csrf-csrf';
+import cookieParser from 'cookie-parser';
 import BotManager from './src/BotManager.js';
 import Config from './src/models/Config.js';
 import { loadLocalConfig, saveLocalConfig, isConfigured } from './src/localConfig.js';
@@ -28,6 +30,23 @@ let adminIds = (localConfig.adminIds || '')
 if (!localConfig.sessionSecret || localConfig.sessionSecret === 'temp-secret') {
   localConfig.sessionSecret = crypto.randomBytes(32).toString('hex');
 }
+
+const {
+  doubleCsrfProtection,
+  generateCsrfToken
+} = doubleCsrf({
+  getSecret: () => localConfig.sessionSecret,
+  cookieName: 'x-csrf-token',
+  cookieOptions: {
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    signed: true
+  },
+  size: 64,
+  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
+  getTokenFromRequest: (req) => req.body?._csrf || req.headers['x-csrf-token'],
+  getSessionIdentifier: (req) => req.session?.id || 'anonymous',
+});
 
 const botManager = new BotManager({
   token: localConfig.botToken,
@@ -132,11 +151,9 @@ app.set('views', path.join(__dirname, 'src', 'dashboard', 'views'));
 app.use('/public', express.static(path.join(__dirname, 'src', 'dashboard', 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(cookieParser(localConfig.sessionSecret));
 
 // Configure session store - use MongoStore if MongoDB is available, otherwise MemoryStore with warning suppression
-// Note: CSRF protection is not implemented as this is an admin-only dashboard with OAuth authentication.
-// All control endpoints are protected by ensureAdmin middleware which checks admin user IDs.
-// For production deployments, consider adding CSRF tokens for additional security.
 const sessionConfig = {
   secret: localConfig.sessionSecret || 'temp-secret',
   resave: false,
@@ -160,6 +177,15 @@ if (localConfig.mongoUri) {
 }
 
 app.use(session(sessionConfig));
+
+// Apply CSRF protection to all routes that write data
+app.use(doubleCsrfProtection);
+
+// Middleware to expose CSRF token to views
+app.use((req, res, next) => {
+  res.locals.csrfToken = generateCsrfToken(req, res);
+  next();
+});
 
 const ensureConfigured = (req, res, next) => {
   if (!configured) return res.redirect('/setup');
@@ -655,7 +681,7 @@ const bootstrap = async () => {
     }
   }
 
-  app.listen(localConfig.port || 8080, () => {
+  const server = app.listen(localConfig.port || 8080, () => {
     // eslint-disable-next-line no-console
     console.log(`Dashboard running on port ${localConfig.port || 8080}`);
     if (!configured) {
@@ -669,9 +695,34 @@ const bootstrap = async () => {
       .start()
       .catch(err => console.error('Bot failed to start:', err));
   }
+
+  // Graceful shutdown
+  const shutdown = async (signal) => {
+    console.log(`\n${signal} received. Shutting down gracefully...`);
+
+    server.close(() => {
+      console.log('HTTP server closed.');
+    });
+
+    if (botManager.client) {
+      await botManager.stop();
+      console.log('Bot stopped.');
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+      console.log('MongoDB connection closed.');
+    }
+
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
 bootstrap().catch(err => {
   // eslint-disable-next-line no-console
   console.error('Failed to bootstrap app:', err);
+  process.exit(1);
 });

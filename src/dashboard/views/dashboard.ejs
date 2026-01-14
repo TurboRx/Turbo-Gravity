@@ -590,12 +590,15 @@
           </div>
           <div class="actions">
             <form method="POST" action="/control/start">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <button class="button success" type="submit">Start</button>
             </form>
             <form method="POST" action="/control/stop">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <button class="button danger" type="submit">Stop</button>
             </form>
             <form method="POST" action="/control/restart">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <button class="button primary" type="submit">Restart</button>
             </form>
           </div>
@@ -613,6 +616,7 @@
           </div>
         </div>
         <form class="form" method="POST" action="/control/profile">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <label>
             Bot Username
             <span class="help-text">The bot's display name (2-32 characters)</span>
@@ -673,6 +677,7 @@
           </div>
         </div>
         <form class="form" method="POST" action="/control/status">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="dual">
             <label>
               Activity Type
@@ -721,6 +726,7 @@
             </div>
           </div>
           <form class="form" method="POST" action="/control/config">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <label class="checkbox">
               <input type="checkbox" name="autoStart" <%= config?.autoStart ? 'checked' : '' %> />
               <span>Auto-start bot on launch</span>
