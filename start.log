@@ -1,0 +1,7 @@
+
+> turbo-gravity-bot@1.0.0 start
+> node index.js
+
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+Dashboard running on port 8080
+Setup required: http://localhost:8080/setup
