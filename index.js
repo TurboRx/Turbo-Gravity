@@ -26,7 +26,6 @@ let adminIds = (localConfig.adminIds || '')
   .map(id => id.trim())
   .filter(id => id.length > 0);
 
-// Generate a strong session secret if not configured
 if (!localConfig.sessionSecret || localConfig.sessionSecret === 'temp-secret') {
   localConfig.sessionSecret = crypto.randomBytes(32).toString('hex');
 }
@@ -95,7 +94,6 @@ const getDiscordUser = async accessToken => {
 };
 
 const configureOAuth = config => {
-  // OAuth configuration is validated at runtime
   if (!config?.clientId || !config?.clientSecret) return false;
   return true;
 };
@@ -104,7 +102,6 @@ if (configured) configureOAuth(localConfig);
 
 const app = express();
 
-// Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -118,28 +115,25 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Rate limiting for authentication routes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: 'Too many authentication attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Rate limiting for setup route
 const setupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 setup attempts per hour
+  windowMs: 60 * 60 * 1000,
+  max: 5,
   message: 'Too many setup attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// General rate limiting
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -153,23 +147,22 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(localConfig.sessionSecret));
 
-// Configure session store - use MongoStore if MongoDB is available, otherwise MemoryStore with warning suppression
 const sessionConfig = {
   secret: localConfig.sessionSecret || 'temp-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-    httpOnly: true
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax'
   }
 };
 
-// Use MongoStore for production-ready session storage if MongoDB is configured
 if (localConfig.mongoUri) {
   sessionConfig.store = MongoStore.create({
     mongoUrl: localConfig.mongoUri,
-    touchAfter: 24 * 3600, // Lazy session update (in seconds)
+    touchAfter: 24 * 3600,
     crypto: {
       secret: localConfig.sessionSecret
     }
@@ -178,10 +171,8 @@ if (localConfig.mongoUri) {
 
 app.use(session(sessionConfig));
 
-// Apply CSRF protection to all routes that write data
 app.use(doubleCsrfProtection);
 
-// Middleware to expose CSRF token to views
 app.use((req, res, next) => {
   res.locals.csrfToken = generateCsrfToken(req, res);
   next();
@@ -210,10 +201,8 @@ const connectMongo = async () => {
   if (mongoose.connection.readyState === 0) {
     try {
       await mongoose.connect(localConfig.mongoUri);
-      // eslint-disable-next-line no-console
       console.log('✅ Dashboard MongoDB connected');
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('❌ Dashboard MongoDB connection failed:', err.message);
       throw err;
     }
@@ -257,12 +246,10 @@ app.get('/setup', (req, res) => {
 
 app.post('/setup', setupLimiter, async (req, res) => {
   try {
-    // Validate required fields (MongoDB is now optional)
     if (!req.body.botToken || !req.body.clientId || !req.body.clientSecret || !req.body.sessionSecret) {
       return res.status(400).send('Missing required fields. Please fill in: Bot Token, Client ID, Client Secret, and Session Secret.');
     }
 
-    // Validate and sanitize inputs
     const botToken = String(req.body.botToken).trim();
     const clientId = String(req.body.clientId).trim();
     const clientSecret = String(req.body.clientSecret).trim();
@@ -270,14 +257,13 @@ app.post('/setup', setupLimiter, async (req, res) => {
     const callbackUrl = String(req.body.callbackUrl || 'http://localhost:8080/auth/discord/callback').trim();
     const guildId = String(req.body.guildId || '').trim();
     const mongoUri = String(req.body.mongoUri || '').trim();
-    const adminIds = String(req.body.adminIds || '').trim();
+    const inputAdminIds = String(req.body.adminIds || '').trim();
     const port = Number.parseInt(req.body.port, 10);
     const presenceText = String(req.body.presenceText || 'Ready to serve').trim();
     const presenceType = Number.parseInt(req.body.presenceType, 10);
     const commandScope = String(req.body.commandScope || 'guild').trim();
     const invitePermissions = String(req.body.invitePermissions || '8').trim();
 
-    // Validate field lengths and formats
     if (botToken.length < 50) {
       return res.status(400).send('Bot Token appears to be invalid (too short).');
     }
@@ -308,7 +294,7 @@ app.post('/setup', setupLimiter, async (req, res) => {
       guildId,
       mongoUri,
       sessionSecret,
-      adminIds,
+      adminIds: inputAdminIds,
       port: port || 8080,
       autoStart: req.body.autoStart === 'on',
       presenceText,
@@ -320,7 +306,7 @@ app.post('/setup', setupLimiter, async (req, res) => {
     await saveLocalConfig(newConfig);
     localConfig = newConfig;
     configured = isConfigured(localConfig);
-    adminIds = (localConfig.adminIds || '')
+    adminIds = (newConfig.adminIds || '')
       .split(',')
       .map(id => id.trim())
       .filter(id => id.length > 0);
@@ -342,7 +328,6 @@ app.post('/setup', setupLimiter, async (req, res) => {
         await connectMongo();
         await getConfig();
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('MongoDB connection failed, continuing without database:', err.message);
       }
     }
@@ -369,7 +354,6 @@ app.post('/setup', setupLimiter, async (req, res) => {
       </html>
     `);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send(`Setup failed: ${err.message}`);
   }
@@ -390,12 +374,10 @@ app.get('/selector', ensureAuth, async (req, res) => {
 app.get('/auth/discord', authLimiter, (req, res) => {
   const config = localConfig;
   
-  // Setup mode requires configuration first
   if (req.query.setup) {
     return res.redirect('/setup?message=Please complete setup first, then you can login to get your Discord User ID.');
   }
 
-  // Normal login requires configuration
   if (!config?.clientId) {
     return res.status(500).send('OAuth not configured. Please complete setup first.');
   }
@@ -432,7 +414,6 @@ app.get('/auth/discord/callback', authLimiter, async (req, res) => {
 
     const userInfo = await getDiscordUser(tokenData.access_token);
     
-    // Fetch user guilds
     const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
@@ -443,11 +424,9 @@ app.get('/auth/discord/callback', authLimiter, async (req, res) => {
     
     const guilds = await guildsResponse.json();
 
-    // Filter guilds where user is admin (has ManageGuild permission)
     const adminGuilds = guilds.filter(guild => {
       if (!guild.permissions) return false;
       const permissions = BigInt(guild.permissions);
-      // Check for ManageGuild permission (0x00000020 = 32)
       return (permissions & BigInt(32)) === BigInt(32);
     });
 
@@ -477,7 +456,6 @@ app.get('/logout', (req, res) => {
 app.get('/manage/:guildId', ensureAuth, async (req, res) => {
   const { guildId } = req.params;
   
-  // Check if user has admin access to this guild
   const guild = req.session.user.displayedGuilds?.find(g => g.id === guildId);
   if (!guild) {
     return res.status(403).render('error', {
@@ -504,7 +482,6 @@ app.post('/control/start', ensureAdmin, async (req, res) => {
     await botManager.start();
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to start bot');
   }
@@ -515,7 +492,6 @@ app.post('/control/stop', ensureAdmin, async (req, res) => {
     await botManager.stop();
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to stop bot');
   }
@@ -526,7 +502,6 @@ app.post('/control/restart', ensureAdmin, async (req, res) => {
     await botManager.restart();
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to restart bot');
   }
@@ -543,7 +518,6 @@ app.post('/control/status', ensureAdmin, async (req, res) => {
     await botManager.setActivity({ type: activityType, text: statusText });
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to update status');
   }
@@ -559,6 +533,7 @@ app.get('/control/config', ensureAdmin, async (req, res) => {
   const config = cachedConfig || await getConfig();
   res.render('dashboard', {
     user: req.session.user,
+    guild: null,
     inviteLink: botManager.getInviteLink({ permissions: config.invitePermissions }),
     botStatus: botManager.client ? 'online' : 'offline',
     config: configToView(config)
@@ -567,7 +542,6 @@ app.get('/control/config', ensureAdmin, async (req, res) => {
 
 app.post('/control/config', ensureAdmin, async (req, res) => {
   try {
-    // Get current config or use local config if MongoDB is not available
     const config = localConfig.mongoUri ? (cachedConfig || await getConfig()) : null;
     const presenceType = Number.parseInt(req.body.presenceType, 10);
     const commandScope = ['global', 'guild'].includes(req.body.commandScope)
@@ -578,7 +552,6 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
     const previousClientId = config?.clientId || localConfig.clientId;
     const previousScope = config?.commandScope || localConfig.commandScope;
 
-    // Update MongoDB config if available
     if (config) {
       config.autoStart = req.body.autoStart === 'on';
       config.presenceText = req.body.presenceText || config.presenceText;
@@ -596,7 +569,6 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
       cachedConfig = config;
     }
 
-    // Always update local config
     const updatedLocalConfig = {
       ...localConfig,
       autoStart: req.body.autoStart === 'on',
@@ -615,7 +587,6 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
     await saveLocalConfig(updatedLocalConfig);
     localConfig = updatedLocalConfig;
 
-    // Apply the config to bot manager - prefer MongoDB config if available, otherwise use local
     const configToApply = config ? {
       botToken: config.botToken || updatedLocalConfig.botToken,
       clientId: config.clientId || updatedLocalConfig.clientId,
@@ -647,7 +618,6 @@ app.post('/control/config', ensureAdmin, async (req, res) => {
 
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to update configuration');
   }
@@ -661,7 +631,6 @@ app.post('/control/profile', ensureAdmin, async (req, res) => {
     }
     res.redirect('/');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).send('Failed to update bot profile');
   }
@@ -675,17 +644,14 @@ const bootstrap = async () => {
         await connectMongo();
         await getConfig();
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('Mongo connection failed, using local config only:', err.message);
       }
     }
   }
 
   const server = app.listen(localConfig.port || 8080, () => {
-    // eslint-disable-next-line no-console
     console.log(`Dashboard running on port ${localConfig.port || 8080}`);
     if (!configured) {
-      // eslint-disable-next-line no-console
       console.log(`Setup required: http://localhost:${localConfig.port || 8080}/setup`);
     }
   });
@@ -696,7 +662,6 @@ const bootstrap = async () => {
       .catch(err => console.error('Bot failed to start:', err));
   }
 
-  // Graceful shutdown
   const shutdown = async (signal) => {
     console.log(`\n${signal} received. Shutting down gracefully...`);
 
@@ -722,7 +687,6 @@ const bootstrap = async () => {
 };
 
 bootstrap().catch(err => {
-  // eslint-disable-next-line no-console
   console.error('Failed to bootstrap app:', err);
   process.exit(1);
 });

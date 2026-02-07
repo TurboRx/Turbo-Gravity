@@ -31,7 +31,6 @@ export async function loadLocalConfig() {
     const data = await readFile(CONFIG_FILE, 'utf-8');
     return { ...defaultConfig, ...JSON.parse(data) };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('Failed to load local config, using defaults:', err.message);
     return { ...defaultConfig };
   }
@@ -45,7 +44,6 @@ export async function saveLocalConfig(config) {
 }
 
 export function isConfigured(config) {
-  // MongoDB is optional, so we don't require mongoUri
   return !!(
     config.botToken &&
     config.clientId &&

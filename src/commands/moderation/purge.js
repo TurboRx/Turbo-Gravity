@@ -5,11 +5,11 @@ export default {
     .setName('purge')
     .setDescription('Bulk delete messages')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addNumberOption(option =>
+    .addIntegerOption(option =>
       option.setName('amount').setDescription('Number of messages to delete').setRequired(true).setMinValue(1).setMaxValue(100)
     ),
   async execute(interaction) {
-    const amount = interaction.options.getNumber('amount');
+    const amount = interaction.options.getInteger('amount');
     if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageMessages)) {
       return interaction.reply({ content: 'I need message management permissions to do that.', ephemeral: true });
     }
