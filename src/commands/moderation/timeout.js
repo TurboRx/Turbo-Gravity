@@ -8,7 +8,7 @@ export default {
     .addUserOption(option =>
       option.setName('target').setDescription('Member to timeout').setRequired(true)
     )
-    .addNumberOption(option =>
+    .addIntegerOption(option =>
       option.setName('duration').setDescription('Duration in minutes').setRequired(true).setMinValue(1).setMaxValue(40320)
     )
     .addStringOption(option =>
@@ -16,7 +16,7 @@ export default {
     ),
   async execute(interaction) {
     const target = interaction.options.getMember('target');
-    const duration = interaction.options.getNumber('duration') * 60 * 1000;
+    const duration = interaction.options.getInteger('duration') * 60 * 1000;
     const reason = interaction.options.getString('reason') || 'No reason provided';
 
     if (!target) {
@@ -47,7 +47,7 @@ export default {
     try {
       await target.timeout(duration, reason);
       return interaction.reply({
-        content: `Timed out ${target.user.tag} for ${interaction.options.getNumber('duration')} minutes | Reason: ${reason}`,
+        content: `Timed out ${target.user.tag} for ${interaction.options.getInteger('duration')} minutes | Reason: ${reason}`,
         ephemeral: true
       });
     } catch (err) {

@@ -41,7 +41,6 @@ export default class BotManager {
   async start() {
     if (this.client) return this.client;
 
-    // Validate configuration before starting
     if (!this.token) {
       throw new Error('Missing DISCORD_TOKEN. Please configure the bot token in setup.');
     }
@@ -73,7 +72,6 @@ export default class BotManager {
   async setActivity({ type, text }) {
     if (!this.client) return;
     
-    // Replace variables in presence text
     const processedText = this.processPresenceText(text);
     
     this.client.user.setPresence({
@@ -88,7 +86,6 @@ export default class BotManager {
     let processed = text;
     const guild = this.client.guilds.cache.first();
     
-    // Replace variables
     processed = processed
       .replace(/{members}/gi, this.client.users.cache.size.toString())
       .replace(/{guilds}/gi, this.client.guilds.cache.size.toString())
@@ -103,7 +100,6 @@ export default class BotManager {
 
   async updateBotProfile({ username, avatar, banner, bio }) {
     if (!this.client?.user) {
-      // eslint-disable-next-line no-console
       console.warn('⚠️  Cannot update profile: bot is not running');
       return;
     }
@@ -116,34 +112,27 @@ export default class BotManager {
       }
       
       if (bio && bio.trim()) {
-        // Process variables in bio
         const processedBio = this.processPresenceText(bio.trim());
         updateData.bio = processedBio;
       }
       
       if (avatar && avatar.trim()) {
-        // Validate URL format using regex for better performance
         const urlPattern = /^https?:\/\/.+\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i;
         if (urlPattern.test(avatar.trim())) {
           updateData.avatar = avatar.trim();
         } else {
-          // eslint-disable-next-line no-console
           console.error('❌ Invalid avatar URL format. Must be a valid image URL (PNG/JPG/JPEG/GIF/WEBP)');
         }
       }
       
-      // Banner is not supported by Discord API for bots - ignore silently
       
       if (Object.keys(updateData).length > 0) {
         await this.client.user.edit(updateData);
-        // eslint-disable-next-line no-console
         console.log('✅ Bot profile updated successfully');
       } else {
-        // eslint-disable-next-line no-console
         console.log('ℹ️  No profile changes to apply');
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('❌ Failed to update bot profile:', err.message);
       throw err;
     }
@@ -165,6 +154,7 @@ export default class BotManager {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildModeration,
         GatewayIntentBits.MessageContent
       ],
       partials: [Partials.Channel]
@@ -177,23 +167,19 @@ export default class BotManager {
     this.client.once('ready', () => {
       this.client.user.setPresence(this.defaultPresence);
       this.autoRestartAttempts = 0; // Reset counter on successful connection
-      // eslint-disable-next-line no-console
       console.log(`✅ Bot logged in as ${this.client.user.tag}`);
     });
 
     this.client.on('disconnect', () => {
-      // eslint-disable-next-line no-console
       console.warn('⚠️  Bot disconnected, attempting auto-restart...');
       this.autoRestart();
     });
 
     this.client.on('error', err => {
-      // eslint-disable-next-line no-console
       console.error('❌ Client error:', err);
     });
 
     this.client.on('shardError', err => {
-      // eslint-disable-next-line no-console
       console.error('❌ Shard error:', err);
     });
 
@@ -204,7 +190,6 @@ export default class BotManager {
       try {
         await command.execute(interaction);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error('Command error:', err);
         const errorMessage = { content: 'An error occurred while executing this command.', ephemeral: true };
         try {
@@ -214,7 +199,6 @@ export default class BotManager {
             await interaction.reply(errorMessage);
           }
         } catch (replyErr) {
-          // eslint-disable-next-line no-console
           console.error('Failed to send error message:', replyErr);
         }
       }
@@ -225,7 +209,6 @@ export default class BotManager {
     try {
       await this.client.login(this.token);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('❌ Failed to login to Discord:', err.message);
       throw new Error(`Discord login failed: ${err.message}. Please check your bot token.`);
     }
@@ -233,7 +216,6 @@ export default class BotManager {
 
   async autoRestart() {
     if (this.autoRestartAttempts >= this.maxAutoRestartAttempts) {
-      // eslint-disable-next-line no-console
       console.error(`Max auto-restart attempts (${this.maxAutoRestartAttempts}) reached. Manual restart required.`);
       return;
     }
@@ -241,14 +223,12 @@ export default class BotManager {
     this.autoRestartAttempts++;
     const delay = Math.pow(2, this.autoRestartAttempts) * 1000; // Exponential backoff
     
-    // eslint-disable-next-line no-console
     console.log(`Auto-restart attempt ${this.autoRestartAttempts}/${this.maxAutoRestartAttempts} in ${delay}ms...`);
     
     setTimeout(async () => {
       try {
         await this.restart();
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error('Auto-restart failed:', err);
         this.autoRestart();
       }
@@ -261,10 +241,8 @@ export default class BotManager {
     
     try {
       await mongoose.connect(this.mongoUri);
-      // eslint-disable-next-line no-console
       console.log('✅ MongoDB connected');
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('❌ MongoDB connection failed:', err.message);
       throw err;
     }
@@ -283,14 +261,12 @@ export default class BotManager {
         this.commands.set(command.data.name, command);
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('No commands directory found, skipping command load:', err.message);
     }
   }
 
   async registerCommands() {
     if (!this.clientId || !this.token) {
-      // eslint-disable-next-line no-console
       console.warn('⚠️  Skipping command registration: missing clientId or token');
       return;
     }
@@ -300,7 +276,6 @@ export default class BotManager {
     const body = Array.from(this.commands.values()).map(cmd => cmd.data.toJSON());
     
     if (body.length === 0) {
-      // eslint-disable-next-line no-console
       console.log('ℹ️  No commands to register');
       return;
     }
@@ -308,15 +283,12 @@ export default class BotManager {
     try {
       if (this.commandScope === 'guild' && this.guildId) {
         await rest.put(Routes.applicationGuildCommands(this.clientId, this.guildId), { body });
-        // eslint-disable-next-line no-console
         console.log(`✅ Registered ${body.length} guild commands for guild ${this.guildId}`);
       } else {
         await rest.put(Routes.applicationCommands(this.clientId), { body });
-        // eslint-disable-next-line no-console
         console.log(`✅ Registered ${body.length} global commands`);
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('❌ Failed to register commands:', err.message);
       throw err;
     }
@@ -342,6 +314,10 @@ export default class BotManager {
   }
 
   async ensureConfig() {
+    if (!this.mongoUri || mongoose.connection.readyState !== 1) {
+      this.config = null;
+      return null;
+    }
     let config = await Config.findOne();
     if (!config) {
       config = await Config.create({

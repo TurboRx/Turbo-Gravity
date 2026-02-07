@@ -41,12 +41,10 @@ export default {
     }
 
     try {
-      await target.kick(reason);
       try {
-        await target.send(`You were kicked from **${interaction.guild.name}** | Reason: ${reason}`);
-      } catch (err) {
-        // ignore DM failures
-      }
+        await target.user.send(`You were kicked from **${interaction.guild.name}** | Reason: ${reason}`);
+      } catch (_) {}
+      await target.kick(reason);
       return interaction.reply({
         content: `Kicked ${target.user.tag} | Reason: ${reason}`,
         ephemeral: true
