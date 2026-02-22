@@ -21,7 +21,7 @@ export default {
             avatar: interaction.user.avatar
           }
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true, setDefaultsOnInsert: true }
       );
     } catch (_) {
       return interaction.reply({ content: 'Database is unavailable.', ephemeral: true });

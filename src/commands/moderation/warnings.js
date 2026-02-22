@@ -13,6 +13,10 @@ export default {
       option.setName('page').setDescription('Page number').setMinValue(1).setRequired(false)
     ),
   async execute(interaction) {
+    if (!interaction.guild) {
+      return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+    }
+
     const user = interaction.options.getUser('target');
     const page = (interaction.options.getInteger('page') || 1) - 1;
     const perPage = 5;
