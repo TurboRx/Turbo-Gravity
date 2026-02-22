@@ -49,6 +49,7 @@ export default {
     profile.lastDaily = new Date();
 
     while (profile.xp >= profile.level * 100) {
+      profile.xp -= profile.level * 100;
       profile.level += 1;
     }
 
