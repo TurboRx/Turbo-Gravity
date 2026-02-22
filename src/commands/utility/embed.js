@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 
+const IMAGE_URL_PATTERN = /^https?:\/\/.+\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i;
+
 export default {
   data: new SlashCommandBuilder()
     .setName('embed')
@@ -38,8 +40,21 @@ export default {
       .setTimestamp(new Date());
 
     if (footer) embed.setFooter({ text: footer });
-    if (image) embed.setImage(image);
-    if (thumbnail) embed.setThumbnail(thumbnail);
+
+    if (image) {
+      if (IMAGE_URL_PATTERN.test(image)) {
+        embed.setImage(image);
+      } else {
+        return interaction.reply({ content: 'Invalid image URL. Must be a direct link ending in .png, .jpg, .gif, or .webp.', ephemeral: true });
+      }
+    }
+    if (thumbnail) {
+      if (IMAGE_URL_PATTERN.test(thumbnail)) {
+        embed.setThumbnail(thumbnail);
+      } else {
+        return interaction.reply({ content: 'Invalid thumbnail URL. Must be a direct link ending in .png, .jpg, .gif, or .webp.', ephemeral: true });
+      }
+    }
 
     await interaction.channel.send({ embeds: [embed] });
     return interaction.reply({ content: 'Embed sent.', ephemeral: true });

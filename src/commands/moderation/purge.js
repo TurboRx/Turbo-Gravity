@@ -14,12 +14,16 @@ export default {
       return interaction.reply({ content: 'I need message management permissions to do that.', ephemeral: true });
     }
 
-    const fetched = await interaction.channel.messages.fetch({ limit: amount });
-    const deleted = await interaction.channel.bulkDelete(fetched, true);
+    try {
+      const fetched = await interaction.channel.messages.fetch({ limit: amount });
+      const deleted = await interaction.channel.bulkDelete(fetched, true);
 
-    return interaction.reply({
-      content: `Deleted ${deleted.size} messages.${deleted.size < fetched.size ? ' (Messages older than 14 days were skipped)' : ''}`,
-      ephemeral: true
-    });
+      return interaction.reply({
+        content: `Deleted ${deleted.size} messages.${deleted.size < fetched.size ? ' (Messages older than 14 days were skipped)' : ''}`,
+        ephemeral: true
+      });
+    } catch (err) {
+      return interaction.reply({ content: `Failed to delete messages: ${err.message}`, ephemeral: true });
+    }
   }
 };

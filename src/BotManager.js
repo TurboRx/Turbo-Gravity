@@ -36,6 +36,8 @@ export default class BotManager {
     this.commands = new Collection();
     this.rest = null;
     this.config = null;
+    this.autoRestartAttempts = 0;
+    this.maxAutoRestartAttempts = 5;
   }
 
   async start() {
@@ -87,7 +89,7 @@ export default class BotManager {
     const guild = this.client.guilds.cache.first();
     
     processed = processed
-      .replace(/{members}/gi, this.client.users.cache.size.toString())
+      .replace(/{members}/gi, guild?.memberCount?.toString() ?? this.client.guilds.cache.reduce((a, g) => a + g.memberCount, 0).toString())
       .replace(/{guilds}/gi, this.client.guilds.cache.size.toString())
       .replace(/{users}/gi, this.client.users.cache.size.toString())
       .replace(/{botname}/gi, this.client.user.username)
@@ -161,18 +163,21 @@ export default class BotManager {
     });
 
     this.client.commands = this.commands;
-    this.autoRestartAttempts = 0;
-    this.maxAutoRestartAttempts = 5;
-    
+
     this.client.once('ready', () => {
       this.client.user.setPresence(this.defaultPresence);
       this.autoRestartAttempts = 0; // Reset counter on successful connection
       console.log(`✅ Bot logged in as ${this.client.user.tag}`);
     });
 
-    this.client.on('disconnect', () => {
-      console.warn('⚠️  Bot disconnected, attempting auto-restart...');
-      this.autoRestart();
+    this.client.on('shardDisconnect', (event, id) => {
+      console.warn(`⚠️  Shard ${id} disconnected (code: ${event.code})`);
+      // Only manually restart for non-resumable fatal errors; discord.js handles normal reconnects
+      const fatalCodes = [4004, 4010, 4011, 4012, 4013, 4014];
+      if (fatalCodes.includes(event.code)) {
+        console.warn('Fatal disconnect code detected, attempting manual restart...');
+        this.autoRestart();
+      }
     });
 
     this.client.on('error', err => {

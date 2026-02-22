@@ -48,12 +48,12 @@ export default {
     }
 
     try {
-      await interaction.guild.members.ban(user, { reason, deleteMessageSeconds: deleteDays * 86400 });
       try {
         await user.send(`You were banned from **${interaction.guild.name}** | Reason: ${reason}`);
-      } catch (err) {
+      } catch (_) {
         // ignore DM failures
       }
+      await interaction.guild.members.ban(user, { reason, deleteMessageSeconds: deleteDays * 86400 });
       return interaction.reply({
         content: `Banned ${user.tag}${deleteDays ? ` and deleted ${deleteDays} day(s) of messages` : ''} | Reason: ${reason}`,
         ephemeral: true
