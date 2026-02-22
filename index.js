@@ -449,7 +449,7 @@ app.get('/logout', (req, res) => {
     if (err) {
       return res.status(500).send('Failed to logout');
     }
-    res.redirect('/setup');
+    res.redirect(configured ? '/auth/discord' : '/setup');
   });
 });
 

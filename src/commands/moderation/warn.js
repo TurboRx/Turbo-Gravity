@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import Warning from '../../models/Warning.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -27,6 +28,19 @@ export default {
       return interaction.reply({ content: 'I cannot warn myself.', ephemeral: true });
     }
 
+    let warnCount = null;
+    try {
+      await Warning.create({
+        guildId: interaction.guild.id,
+        userId: target.id,
+        moderatorId: interaction.user.id,
+        reason
+      });
+      warnCount = await Warning.countDocuments({ guildId: interaction.guild.id, userId: target.id });
+    } catch (_) {
+      // Database unavailable — warning is still shown but not persisted
+    }
+
     const embed = new EmbedBuilder()
       .setTitle('⚠️ Warning Issued')
       .setColor('#f59e0b')
@@ -36,6 +50,10 @@ export default {
         { name: 'Reason', value: reason }
       )
       .setTimestamp(new Date());
+
+    if (warnCount !== null) {
+      embed.setFooter({ text: `Total warnings for this user: ${warnCount}` });
+    }
 
     try {
       await target.user.send({
