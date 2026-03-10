@@ -10,3 +10,6 @@ dist/
 start.log
 *-backup.*
 *-old.*
+
+# Rust build artifacts (Cargo.lock is intentionally committed for binaries)
+target/

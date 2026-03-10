@@ -1,0 +1,21 @@
+# Bot configuration
+# Copy this file to config.toml and fill in your values.
+
+[bot]
+token = ""           # Your Discord bot token
+client_id = ""       # Your Discord application/client ID
+guild_id = ""        # Guild ID for guild-scoped command registration (leave empty for global)
+command_scope = "guild"   # "guild" or "global"
+presence_text = "Ready to serve"
+presence_type = 0    # 0=Playing, 1=Streaming, 2=Listening, 3=Watching
+
+[database]
+mongo_uri = ""       # MongoDB connection string (leave empty to run without DB)
+
+[dashboard]
+enable_dashboard = true    # Set to false to disable the web dashboard
+port = 8080
+session_secret = ""        # Random string for session signing; auto-generated if empty
+client_secret = ""         # Discord OAuth2 client secret (required for dashboard auth)
+callback_url = "http://localhost:8080/auth/discord/callback"
+admin_ids = []             # List of Discord user IDs allowed to use admin endpoints
