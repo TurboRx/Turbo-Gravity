@@ -1,134 +1,139 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Setup | Turbo Gravity</title>
+  <title>Setup · Turbo Gravity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="/public/styles.css" />
 </head>
 <body>
-  <div class="backdrop"></div>
-  <main class="page setup-page">
-    <section class="setup-card">
-      <div class="brand">
-        <div class="dot"></div>
-        <div>
-          <h1>Turbo Gravity Setup</h1>
-          <p>Configure your Discord bot to get started</p>
+<div class="setup-wrapper">
+  <div class="setup-card">
+    <div class="setup-header">
+      <div class="setup-icon">🚀</div>
+      <div>
+        <h1>Turbo Gravity Setup</h1>
+        <p>Configure your Discord bot to get started</p>
+      </div>
+    </div>
+
+    <form class="form" method="POST" action="/setup">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+      <!-- Discord Credentials -->
+      <div class="form-section">
+        <div class="form-section-title">🔑 Discord Bot Credentials</div>
+
+        <div class="form-group">
+          <label class="form-label">Bot Token <span style="color:var(--danger)">*</span></label>
+          <input type="password" name="botToken" placeholder="Your Discord bot token" autocomplete="off" required />
+          <p class="form-hint">Found in the Discord Developer Portal → Bot section.</p>
+        </div>
+
+        <div class="dual-grid">
+          <div class="form-group">
+            <label class="form-label">Client ID <span style="color:var(--danger)">*</span></label>
+            <input type="text" name="clientId" placeholder="Application client ID" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client Secret <span style="color:var(--danger)">*</span></label>
+            <input type="password" name="clientSecret" placeholder="OAuth2 client secret" autocomplete="off" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">OAuth Callback URL</label>
+          <input type="url" name="callbackUrl" value="http://localhost:8080/auth/discord/callback" required />
+          <p class="form-hint">Add this exact URL to your Discord app's OAuth2 redirect URIs.</p>
         </div>
       </div>
 
-      <form class="form setup-form" method="POST" action="/setup">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="form-section">
-          <h3>Discord Bot Credentials</h3>
-          <label>Bot Token
-            <input type="password" name="botToken" placeholder="Your Discord bot token" required />
-          </label>
-          <div class="dual">
-            <label>Client ID
-              <input type="text" name="clientId" placeholder="Application client ID" required />
-            </label>
-            <label>Client Secret
-              <input type="password" name="clientSecret" placeholder="OAuth2 client secret" required />
-            </label>
-          </div>
-          <label>OAuth Callback URL
-            <input type="url" name="callbackUrl" value="http://localhost:8080/auth/discord/callback" required />
-          </label>
+      <!-- Database & Security -->
+      <div class="form-section">
+        <div class="form-section-title">🔒 Database & Security</div>
+
+        <div class="form-group">
+          <label class="form-label">MongoDB URI <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" />
+          <p class="form-hint">Leave blank to use local file storage for configuration.</p>
         </div>
 
-        <div class="form-section">
-          <h3>Database & Security (MongoDB Optional)</h3>
-          <label>MongoDB URI (optional - leave empty to use file storage)
-            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" />
-          </label>
-          <label>Session Secret
-            <input type="password" name="sessionSecret" placeholder="Random secure string" required />
-          </label>
-          <label>Admin User IDs (comma-separated)
-            <input type="text" name="adminIds" placeholder="123456789,987654321" value="<%= ownerId || '' %>" required />
-          </label>
+        <div class="form-group">
+          <label class="form-label">Session Secret <span style="color:var(--danger)">*</span></label>
+          <input type="password" name="sessionSecret" placeholder="Long random secure string (min 32 chars)" autocomplete="off" required />
+          <p class="form-hint">At least 32 characters. This secures your session cookies.</p>
         </div>
 
-        <div class="form-section">
-          <h3>Bot Settings</h3>
-          <div class="dual">
-            <label>Guild ID (optional)
-              <input type="text" name="guildId" placeholder="For guild-only commands" />
-            </label>
-            <label>Port
-              <input type="number" name="port" value="8080" required />
-            </label>
+        <div class="form-group">
+          <label class="form-label">Admin User IDs <span style="color:var(--danger)">*</span></label>
+          <input type="text" name="adminIds" placeholder="123456789,987654321" value="<%= ownerId || '' %>" required />
+          <p class="form-hint">Comma-separated Discord user IDs that can access the dashboard.</p>
+        </div>
+      </div>
+
+      <!-- Bot Settings -->
+      <div class="form-section">
+        <div class="form-section-title">⚙️ Bot Settings</div>
+
+        <div class="dual-grid">
+          <div class="form-group">
+            <label class="form-label">Guild ID <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <input type="text" name="guildId" placeholder="For guild-only commands" />
           </div>
-          <div class="dual">
-            <label>Presence Type
-              <select name="presenceType">
-                <option value="0">Playing</option>
-                <option value="2">Listening</option>
-                <option value="3">Watching</option>
-                <option value="5">Competing</option>
-              </select>
-            </label>
-            <label>Command Scope
-              <select name="commandScope">
-                <option value="guild">Guild</option>
-                <option value="global">Global</option>
-              </select>
-            </label>
+          <div class="form-group">
+            <label class="form-label">Port</label>
+            <input type="number" name="port" value="8080" min="1" max="65535" required />
           </div>
-          <label>Presence Text
-            <input type="text" name="presenceText" value="Ready to serve" />
-          </label>
-          <label>Invite Permissions
-            <input type="text" name="invitePermissions" value="8" />
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" name="autoStart" />
-            <span>Auto-start bot on launch</span>
-          </label>
         </div>
 
-        <button class="button primary" type="submit">Save & Start</button>
-      </form>
-    </section>
-  </main>
+        <div class="dual-grid">
+          <div class="form-group">
+            <label class="form-label">Presence Type</label>
+            <select name="presenceType">
+              <option value="0">🎮 Playing</option>
+              <option value="2">🎵 Listening to</option>
+              <option value="3">📺 Watching</option>
+              <option value="5">🏆 Competing in</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Command Scope</label>
+            <select name="commandScope">
+              <option value="guild">Guild (Instant)</option>
+              <option value="global">Global</option>
+            </select>
+          </div>
+        </div>
 
-  <style>
-    .setup-page {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 24px;
-    }
-    .setup-card {
-      width: 100%;
-      max-width: 720px;
-      background: var(--panel);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 32px;
-      box-shadow: var(--shadow);
-    }
-    .setup-card .brand {
-      margin-bottom: 24px;
-    }
-    .setup-form {
-      gap: 24px;
-    }
-    .form-section {
-      display: grid;
-      gap: 12px;
-      padding: 16px;
-      background: var(--panel-strong);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 14px;
-    }
-    .form-section h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-    }
-  </style>
+        <div class="form-group">
+          <label class="form-label">Presence Text</label>
+          <input type="text" name="presenceText" value="Ready to serve" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Invite Permissions</label>
+          <input type="text" name="invitePermissions" value="8" />
+          <p class="form-hint"><code style="font-family:var(--mono);color:var(--primary)">8</code> = Administrator. Use the Discord permissions calculator for other values.</p>
+        </div>
+
+        <label class="checkbox-group">
+          <input type="checkbox" name="autoStart" />
+          <span>Auto-start bot on dashboard launch</span>
+        </label>
+      </div>
+
+      <button class="btn btn-primary btn-lg btn-full" type="submit">🚀 Save & Start</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const saved = localStorage.getItem('tg-theme');
+    if (saved === 'light') document.documentElement.classList.add('light');
+  })();
+</script>
 </body>
 </html>

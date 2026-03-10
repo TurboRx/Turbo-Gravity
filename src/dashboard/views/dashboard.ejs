@@ -1,802 +1,446 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Turbo Gravity | Dashboard</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    :root {
-      --primary: #0ea5e9;
-      --success: #22c55e;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --text: #f5f5f5;
-      --text-muted: #999;
-      --bg-dark: #050b18;
-      --bg-card: #0f1419;
-      --border: #1e293b;
-    }
-
-    body {
-      background: var(--bg-dark);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      line-height: 1.6;
-    }
-
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-      background: linear-gradient(135deg, #0f1419 0%, #1a202c 100%);
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-weight: 600;
-      font-size: 18px;
-    }
-
-    .topbar-actions {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
-      text-decoration: none;
-      display: inline-block;
-    }
-
-    .button.primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .button.primary:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
-    }
-
-    .button.ghost {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .button.ghost:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .button.success {
-      background: var(--success);
-      color: white;
-    }
-
-    .button.danger {
-      background: var(--danger);
-      color: white;
-    }
-
-    .user-chip {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 6px;
-      font-size: 14px;
-    }
-
-    .pill {
-      background: var(--primary);
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 24px;
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .tab-button {
-      padding: 12px 20px;
-      background: transparent;
-      border: none;
-      border-bottom: 3px solid transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-weight: 500;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .tab-button.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-    }
-
-    .tab-button:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-      animation: fadeIn 0.3s ease-in;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 20px;
-    }
-
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      transition: all 0.2s;
-    }
-
-    .card:hover {
-      border-color: var(--primary);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      margin-bottom: 16px;
-    }
-
-    .card-header h3 {
-      font-size: 16px;
-      margin-bottom: 4px;
-    }
-
-    .card-header .eyebrow {
-      color: var(--text-muted);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .form {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    label {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    input, textarea, select {
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: var(--primary);
-      background: rgba(14, 165, 233, 0.1);
-    }
-
-    textarea {
-      resize: vertical;
-      min-height: 80px;
-    }
-
-    .help-text {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 4px;
-      line-height: 1.4;
-    }
-
-    .tooltip-icon {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      background: var(--primary);
-      color: white;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 16px;
-      font-size: 12px;
-      cursor: help;
-      position: relative;
-    }
-
-    .tooltip-icon:hover::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 125%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--primary);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 6px;
-      white-space: nowrap;
-      font-size: 12px;
-      z-index: 1000;
-      pointer-events: none;
-    }
-
-    .dual {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    /* Mobile Responsiveness - Optimized for reduced scrolling */
-    @media (max-width: 768px) {
-      body {
-        font-size: 14px;
-      }
-
-      .topbar {
-        padding: 12px 16px;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-      }
-
-      .brand {
-        justify-content: center;
-      }
-
-      .topbar-actions {
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-      }
-
-      .user-chip {
-        order: -1;
-        justify-content: center;
-        width: 100%;
-      }
-
-      .button {
-        padding: 8px 12px;
-        font-size: 13px;
-      }
-
-      .container {
-        padding: 12px;
-        max-width: 100%;
-      }
-
-      .tabs {
-        margin-bottom: 16px;
-        gap: 4px;
-        padding-bottom: 8px;
-      }
-
-      .tab-button {
-        padding: 10px 12px;
-        font-size: 12px;
-        flex: 1;
-        min-width: fit-content;
-      }
-
-      .grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-      }
-
-      .dual {
-        grid-template-columns: 1fr;
-        gap: 12px;
-      }
-
-      .card {
-        padding: 16px;
-        border-radius: 8px;
-      }
-
-      .card-header h3 {
-        font-size: 15px;
-      }
-
-      .form {
-        gap: 14px;
-      }
-
-      input, textarea, select {
-        padding: 10px;
-        font-size: 14px;
-      }
-
-      textarea {
-        min-height: 70px;
-      }
-
-      .actions {
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .actions .button {
-        width: 100%;
-        text-align: center;
-      }
-
-      .status-chip {
-        padding: 6px 12px;
-        font-size: 13px;
-      }
-
-      .variable-list {
-        grid-template-columns: 1fr;
-        gap: 6px;
-        font-size: 11px;
-      }
-
-      .info-box {
-        padding: 10px;
-        font-size: 12px;
-      }
-
-      .help-text {
-        font-size: 11px;
-      }
-
-      .tooltip-icon:hover::after {
-        white-space: normal;
-        max-width: 200px;
-        word-wrap: break-word;
-      }
-    }
-
-    /* Extra small devices */
-    @media (max-width: 375px) {
-      .topbar {
-        padding: 10px 12px;
-      }
-
-      .container {
-        padding: 8px;
-      }
-
-      .card {
-        padding: 12px;
-      }
-
-      .tab-button {
-        padding: 8px 10px;
-        font-size: 11px;
-      }
-
-      .button {
-        padding: 6px 10px;
-        font-size: 12px;
-      }
-
-      .user-chip {
-        font-size: 12px;
-      }
-    }
-
-    .status-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      background: rgba(34, 197, 94, 0.1);
-      color: var(--success);
-    }
-
-    .status-chip.offline {
-      background: rgba(107, 114, 128, 0.1);
-      color: var(--text-muted);
-    }
-
-    .pulse {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .checkbox {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .checkbox input {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .actions form {
-      display: flex;
-    }
-
-    .info-box {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      border-radius: 6px;
-      padding: 12px;
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-      line-height: 1.5;
-    }
-
-    .variable-list {
-      font-size: 12px;
-      color: var(--text-muted);
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
-      margin-top: 8px;
-      padding: 8px;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 4px;
-    }
-
-    .variable {
-      font-family: monospace;
-      color: var(--primary);
-    }
-  </style>
+  <title>Control Panel · Turbo Gravity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="/public/styles.css" />
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand">
-      <div style="font-size: 20px;">🚀</div>
-      <div>
-        <h1 style="font-size: 16px; margin: 0;">Turbo Gravity</h1>
-        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Control Panel</p>
-      </div>
-    </div>
-    <div class="topbar-actions">
-      <% if (guild) { %>
-        <a class="button ghost" href="/selector">← Back</a>
-      <% } %>
-      <button class="button ghost" id="theme-toggle">🌙</button>
-      <a class="button ghost" href="/control/invite">Invite</a>
-      <a class="button ghost" href="/logout">Logout</a>
-      <div class="user-chip">
-        <span><%= user.username %></span>
-        <span class="pill">Admin</span>
-      </div>
-    </div>
-  </div>
 
-  <div class="container">
-    <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab-button active" onclick="switchTab(event, 'bot-status')">
-        Bot Status
-      </button>
-      <button class="tab-button" onclick="switchTab(event, 'bot-profile')">
-        Profile
-      </button>
-      <button class="tab-button" onclick="switchTab(event, 'presence')">
-        Presence
-      </button>
-      <button class="tab-button" onclick="switchTab(event, 'settings')">
-        Settings
-      </button>
-    </div>
+  <!-- Sidebar Overlay (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-    <!-- Bot Status Tab -->
-    <div id="bot-status" class="tab-content active">
-      <div class="grid">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <p class="eyebrow">Current Status</p>
-              <h3>Bot Health</h3>
-            </div>
+  <div class="app-layout">
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <div class="brand-icon">🚀</div>
+          <div class="brand-text">
+            <h2>Turbo Gravity</h2>
+            <span>Control Panel</span>
           </div>
-          <div style="margin-bottom: 20px;">
-            <span class="status-chip <%= botStatus === 'online' ? '' : 'offline' %>">
-              <span class="pulse"></span>
-              <%= botStatus.toUpperCase() %>
-            </span>
-          </div>
-          <p class="help-text">Status: <%= botStatus === 'online' ? 'Bot is connected and ready' : 'Bot is not connected' %></p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-label">Management</div>
+          <button class="nav-item active" onclick="switchTab(event, 'tab-status')" id="nav-status">
+            <span class="nav-icon">⚡</span> Bot Status
+          </button>
+          <button class="nav-item" onclick="switchTab(event, 'tab-profile')" id="nav-profile">
+            <span class="nav-icon">🎨</span> Bot Profile
+          </button>
+          <button class="nav-item" onclick="switchTab(event, 'tab-presence')" id="nav-presence">
+            <span class="nav-icon">📡</span> Presence
+          </button>
+          <button class="nav-item" onclick="switchTab(event, 'tab-settings')" id="nav-settings">
+            <span class="nav-icon">⚙️</span> Settings
+          </button>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <p class="eyebrow">Quick Actions</p>
-              <h3>Bot Control</h3>
+        <div class="nav-section">
+          <div class="nav-label">Quick Links</div>
+          <% if (guild) { %>
+          <a class="nav-item" href="/selector">
+            <span class="nav-icon">◀</span> All Servers
+          </a>
+          <% } %>
+          <a class="nav-item" href="/control/invite" target="_blank">
+            <span class="nav-icon">🔗</span> Invite Bot
+          </a>
+          <a class="nav-item" href="/logout">
+            <span class="nav-icon">🚪</span> Logout
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-badge">
+          <div class="user-avatar-sm">
+            <% if (user.avatar) { %>
+              <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" />
+            <% } else { %>
+              <%= user.username.charAt(0).toUpperCase() %>
+            <% } %>
+          </div>
+          <div class="user-badge-info">
+            <div class="user-badge-name"><%= user.username %></div>
+            <div class="user-badge-role">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <div class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="hamburger" id="hamburgerBtn" onclick="openSidebar()" aria-label="Menu">☰</button>
+          <div class="breadcrumb">
+            <% if (guild) { %>
+              <a href="/selector">Servers</a>
+              <span>/</span>
+              <span><%= guild.name %></span>
+            <% } else { %>
+              <span>Dashboard</span>
+            <% } %>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="theme-toggle" id="themeToggle" title="Toggle dark/light mode">🌙</button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <main class="page">
+        <!-- Status Strip -->
+        <div class="status-strip">
+          <div class="status-indicator">
+            <div class="pulse-dot <%= botStatus !== 'online' ? 'offline' : '' %>"></div>
+            <strong>Bot is <%= botStatus.toUpperCase() %></strong>
+          </div>
+          <div class="status-sep"></div>
+          <span class="text-muted text-sm">
+            <% if (guild) { %>
+              Managing <strong style="color:var(--text)"><%= guild.name %></strong>
+            <% } else { %>
+              Global dashboard
+            <% } %>
+          </span>
+          <% if (botStatus === 'online') { %>
+            <span class="badge badge-success ml-auto">● Live</span>
+          <% } else { %>
+            <span class="badge badge-muted ml-auto">● Offline</span>
+          <% } %>
+        </div>
+
+        <!-- ── Tab: Bot Status ── -->
+        <div class="tab-panel active" id="tab-status">
+          <div class="page-header">
+            <h1 class="page-title">Bot Status</h1>
+            <p class="page-subtitle">Monitor and control your Discord bot</p>
+          </div>
+
+          <div class="grid grid-2">
+            <!-- Status Card -->
+            <div class="card">
+              <div class="card-icon blue">⚡</div>
+              <div class="card-label">Current State</div>
+              <div class="card-title">Connection Status</div>
+              <div style="margin: 20px 0;">
+                <span class="badge <%= botStatus === 'online' ? 'badge-success' : 'badge-muted' %>" style="font-size:14px; padding:8px 16px; border-radius:var(--radius-sm);">
+                  <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:4px;"></span>
+                  <%= botStatus.toUpperCase() %>
+                </span>
+              </div>
+              <p class="form-hint">
+                <%= botStatus === 'online'
+                  ? '✅ Bot is connected to Discord and actively serving.'
+                  : '⚠️ Bot is disconnected. Use Start below to bring it online.' %>
+              </p>
+            </div>
+
+            <!-- Control Card -->
+            <div class="card">
+              <div class="card-icon green">🎛️</div>
+              <div class="card-label">Quick Actions</div>
+              <div class="card-title" style="margin-bottom:20px">Bot Controls</div>
+              <div class="actions-row">
+                <form method="POST" action="/control/start">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-success" type="submit">▶ Start</button>
+                </form>
+                <form method="POST" action="/control/stop">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger" type="submit">■ Stop</button>
+                </form>
+                <form method="POST" action="/control/restart">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-primary" type="submit">↺ Restart</button>
+                </form>
+              </div>
+              <p class="form-hint" style="margin-top:14px">
+                Changes to settings often require a restart to take effect.
+              </p>
             </div>
           </div>
-          <div class="actions">
-            <form method="POST" action="/control/start">
+
+          <!-- Invite Link -->
+          <div class="card mt-6">
+            <div class="card-label">Invite</div>
+            <div class="card-title" style="margin-bottom:12px">Bot Invite Link</div>
+            <p class="form-hint" style="margin-bottom:12px">Share this link to invite the bot to other servers:</p>
+            <div class="code-block"><%= inviteLink %></div>
+            <div class="actions-row" style="margin-top:14px">
+              <a class="btn btn-primary" href="<%= inviteLink %>" target="_blank">🔗 Open Invite</a>
+              <button class="btn btn-ghost" onclick="copyInvite()">📋 Copy Link</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Tab: Bot Profile ── -->
+        <div class="tab-panel" id="tab-profile">
+          <div class="page-header">
+            <h1 class="page-title">Bot Profile</h1>
+            <p class="page-subtitle">Customize your bot's identity on Discord</p>
+          </div>
+
+          <div class="card">
+            <div class="card-icon purple">🎨</div>
+            <div class="card-label">Identity</div>
+            <div class="card-title" style="margin-bottom:20px">Profile Settings</div>
+
+            <form class="form" method="POST" action="/control/profile">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button class="button success" type="submit">Start</button>
+
+              <div class="form-group">
+                <label class="form-label">Bot Username</label>
+                <input type="text" name="username" placeholder="Turbo Gravity" minlength="2" maxlength="32" />
+                <p class="form-hint">2–32 characters. Leave blank to keep current name.</p>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Avatar URL</label>
+                <input type="url" name="avatar" placeholder="https://example.com/avatar.png" />
+                <p class="form-hint">Direct image link (PNG / JPG / GIF). Recommended: 1024×1024.</p>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Bio / About Me</label>
+                <textarea name="bio" maxlength="190" placeholder="Powerful Discord bot serving {members} members!"></textarea>
+                <p class="form-hint">Up to 190 characters. Supports dynamic variables (see below).</p>
+              </div>
+
+              <div class="info-box">
+                <strong>🔮 Dynamic Variables</strong> — replace these in your bio with live data:
+                <div class="variable-grid">
+                  <div class="var-tag">{members} <span class="var-desc">members</span></div>
+                  <div class="var-tag">{guilds} <span class="var-desc">servers</span></div>
+                  <div class="var-tag">{users} <span class="var-desc">users</span></div>
+                  <div class="var-tag">{botname} <span class="var-desc">bot name</span></div>
+                  <div class="var-tag">{servername} <span class="var-desc">server</span></div>
+                  <div class="var-tag">{timestamp} <span class="var-desc">time</span></div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary btn-lg" type="submit">💾 Save Profile</button>
             </form>
-            <form method="POST" action="/control/stop">
+          </div>
+        </div>
+
+        <!-- ── Tab: Presence ── -->
+        <div class="tab-panel" id="tab-presence">
+          <div class="page-header">
+            <h1 class="page-title">Presence</h1>
+            <p class="page-subtitle">Set what your bot shows as its activity status</p>
+          </div>
+
+          <div class="card">
+            <div class="card-icon blue">📡</div>
+            <div class="card-label">Activity</div>
+            <div class="card-title" style="margin-bottom:20px">Status & Activity</div>
+
+            <form class="form" method="POST" action="/control/status">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button class="button danger" type="submit">Stop</button>
+
+              <div class="dual-grid">
+                <div class="form-group">
+                  <label class="form-label">Activity Type</label>
+                  <select name="activityType">
+                    <option value="0">🎮 Playing</option>
+                    <option value="2">🎵 Listening to</option>
+                    <option value="3">📺 Watching</option>
+                    <option value="5">🏆 Competing in</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Status Text</label>
+                  <input type="text" name="statusText" placeholder="with your commands" required />
+                </div>
+              </div>
+
+              <div class="info-box">
+                <strong>🔮 Dynamic Variables</strong> — use in status text:
+                <div class="variable-grid">
+                  <div class="var-tag">{members} <span class="var-desc">members</span></div>
+                  <div class="var-tag">{guilds} <span class="var-desc">servers</span></div>
+                  <div class="var-tag">{users} <span class="var-desc">users</span></div>
+                  <div class="var-tag">{botname} <span class="var-desc">bot name</span></div>
+                  <div class="var-tag">{servername} <span class="var-desc">server</span></div>
+                  <div class="var-tag">{prefix} <span class="var-desc">prefix /</span></div>
+                  <div class="var-tag">{timestamp} <span class="var-desc">time</span></div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" type="submit">💾 Save Presence</button>
             </form>
-            <form method="POST" action="/control/restart">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button class="button primary" type="submit">Restart</button>
-            </form>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Bot Profile Tab -->
-    <div id="bot-profile" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Profile Information</p>
-            <h3>Bot Profile <span class="tooltip-icon" data-tooltip="Update bot's name, avatar, banner, and bio">?</span></h3>
-          </div>
-        </div>
-        <form class="form" method="POST" action="/control/profile">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <label>
-            Bot Username
-            <span class="help-text">The bot's display name (2-32 characters)</span>
-            <input 
-              type="text" 
-              name="username" 
-              placeholder="Turbo Gravity" 
-              minlength="2" 
-              maxlength="32" 
-              pattern="[^\@\#\:\d].{1,31}"
-              title="Username must be 2-32 characters and cannot start with @, #, :, or a number"
-            />
-          </label>
-
-          <label>
-            Avatar URL
-            <span class="help-text">Direct image URL for bot avatar (PNG/JPG/GIF, recommended 1024x1024)</span>
-            <input type="url" name="avatar" placeholder="https://i.imgur.com/example.png" />
-          </label>
-
-          <label>
-            Banner URL
-            <span class="help-text">⚠️ Banner URL for reference only (Discord API doesn't support bot banners yet)</span>
-            <input type="url" name="banner" placeholder="https://i.imgur.com/example.png" disabled title="Banner is not yet supported by Discord for bot users" />
-          </label>
-
-          <label>
-            Bio / Description
-            <span class="help-text">Short description of your bot (up to 190 characters, supports variables)</span>
-            <textarea name="bio" maxlength="190" placeholder="Powerful Discord bot with web control panel. Serving {members} members!"></textarea>
-          </label>
-
-          <div class="info-box">
-            💡 <strong>Supported Variables:</strong> Use these in your bio and they'll be replaced with live data
-            <div class="variable-list">
-              <div><span class="variable">{members}</span> - Total members</div>
-              <div><span class="variable">{guilds}</span> - Total servers</div>
-              <div><span class="variable">{users}</span> - Total users</div>
-              <div><span class="variable">{botname}</span> - Bot name</div>
-              <div><span class="variable">{servername}</span> - Server name</div>
-              <div><span class="variable">{prefix}</span> - Command prefix (/)</div>
-              <div><span class="variable">{timestamp}</span> - Current time</div>
-            </div>
+        <!-- ── Tab: Settings ── -->
+        <div class="tab-panel" id="tab-settings">
+          <div class="page-header">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-subtitle">Configure bot behavior and connection settings</p>
           </div>
 
-          <button class="button primary" type="submit">💾 Save Profile</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Presence Tab -->
-    <div id="presence" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Bot Presence</p>
-            <h3>Status & Activity <span class="tooltip-icon" data-tooltip="Controls what shows under bot name in Discord">?</span></h3>
-          </div>
-        </div>
-        <form class="form" method="POST" action="/control/status">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <div class="dual">
-            <label>
-              Activity Type
-              <span class="help-text">What the bot appears to be doing</span>
-              <select name="activityType">
-                <option value="0">Playing</option>
-                <option value="2">Listening to</option>
-                <option value="3">Watching</option>
-                <option value="5">Competing in</option>
-              </select>
-            </label>
-
-            <label>
-              Status Text
-              <span class="help-text">The activity message (supports variables)</span>
-              <input type="text" name="statusText" placeholder="Playing with APIs" required />
-            </label>
-          </div>
-
-          <div class="info-box">
-            💡 <strong>Supported Variables:</strong> Use these in your status text and they'll be replaced with live data
-            <div class="variable-list">
-              <div><span class="variable">{members}</span> - Total members</div>
-              <div><span class="variable">{guilds}</span> - Total servers</div>
-              <div><span class="variable">{users}</span> - Total users</div>
-              <div><span class="variable">{botname}</span> - Bot name</div>
-              <div><span class="variable">{servername}</span> - Server name</div>
-              <div><span class="variable">{prefix}</span> - Prefix (/)</div>
-              <div><span class="variable">{timestamp}</span> - Current time</div>
-            </div>
-          </div>
-
-          <button class="button primary" type="submit">Save Presence</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Settings Tab -->
-    <div id="settings" class="tab-content">
-      <div class="grid">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <p class="eyebrow">Bot Settings</p>
-              <h3>Configuration <span class="tooltip-icon" data-tooltip="General bot settings">?</span></h3>
-            </div>
-          </div>
-          <form class="form" method="POST" action="/control/config">
+          <form class="form" method="POST" action="/control/config" id="settingsForm">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <label class="checkbox">
-              <input type="checkbox" name="autoStart" <%= config?.autoStart ? 'checked' : '' %> />
-              <span>Auto-start bot on launch</span>
-            </label>
-            <span class="help-text">Automatically start the bot when dashboard launches</span>
 
-            <label>
-              Command Scope
-              <span class="help-text">Guild (instant) or Global (up to 1 hour cache)</span>
-              <select name="commandScope">
-                <option value="guild" <%= config?.commandScope === 'guild' ? 'selected' : '' %>>Guild (Fastest)</option>
-                <option value="global" <%= config?.commandScope === 'global' ? 'selected' : '' %>>Global</option>
-              </select>
-            </label>
+            <div class="grid grid-2">
+              <!-- General -->
+              <div class="card">
+                <div class="card-icon gold">⚙️</div>
+                <div class="card-label">General</div>
+                <div class="card-title" style="margin-bottom:20px">Bot Behavior</div>
 
-            <label>
-              Guild ID (Optional)
-              <span class="help-text">For guild-only command registration</span>
-              <input type="text" name="guildId" value="<%= config?.guildId || '' %>" placeholder="Optional" />
-            </label>
+                <div class="form-group">
+                  <label class="form-label">Command Scope</label>
+                  <select name="commandScope">
+                    <option value="guild" <%= config && config.commandScope === 'guild' ? 'selected' : '' %>>Guild (Instant)</option>
+                    <option value="global" <%= config && config.commandScope === 'global' ? 'selected' : '' %>>Global (up to 1h cache)</option>
+                  </select>
+                  <p class="form-hint">Guild scope registers instantly; global scope caches for up to 1 hour.</p>
+                </div>
 
-            <label>
-              Invite Permissions
-              <span class="help-text">Permission integer for invite link (8 = administrator)</span>
-              <input type="text" name="invitePermissions" value="<%= config?.invitePermissions || '8' %>" />
-            </label>
+                <div class="form-group">
+                  <label class="form-label">Guild ID (Optional)</label>
+                  <input type="text" name="guildId" value="<%= config ? config.guildId : '' %>" placeholder="Discord server ID" />
+                  <p class="form-hint">For guild-scoped command registration only.</p>
+                </div>
 
-            <button class="button primary" type="submit">Save Settings</button>
+                <div class="form-group">
+                  <label class="form-label">Invite Permissions</label>
+                  <input type="text" name="invitePermissions" value="<%= config ? config.invitePermissions : '8' %>" />
+                  <p class="form-hint">Permission integer for the invite link. <code style="font-family:var(--mono);color:var(--primary)">8</code> = Administrator.</p>
+                </div>
+
+                <div class="form-group">
+                  <label class="checkbox-group">
+                    <input type="checkbox" name="autoStart" <%= config && config.autoStart ? 'checked' : '' %> />
+                    <span>Auto-start bot on dashboard launch</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Credentials -->
+              <div class="card">
+                <div class="card-icon blue">🔑</div>
+                <div class="card-label">Credentials</div>
+                <div class="card-title" style="margin-bottom:20px">Bot Tokens</div>
+
+                <div class="form-group">
+                  <label class="form-label">Bot Token</label>
+                  <input type="password" name="botToken" placeholder="Leave blank to keep current" autocomplete="off" />
+                  <p class="form-hint">Only fill in to update. Your token is stored securely.</p>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Client ID</label>
+                  <input type="text" name="clientId" placeholder="Leave blank to keep current" />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Client Secret</label>
+                  <input type="password" name="clientSecret" placeholder="Leave blank to keep current" autocomplete="off" />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">OAuth Callback URL</label>
+                  <input type="url" name="callbackUrl" placeholder="http://localhost:8080/auth/discord/callback" />
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+              <button class="btn btn-primary btn-lg" type="submit">💾 Save Settings</button>
+            </div>
           </form>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <p class="eyebrow">Invite Link</p>
-              <h3>Add Bot to Server <span class="tooltip-icon" data-tooltip="Share this link to invite bot to other servers">?</span></h3>
-            </div>
-          </div>
-          <p class="help-text">Share this link to invite the bot to your servers:</p>
-          <div style="word-break: break-all; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-top: 12px; font-size: 12px;">
-            <a href="<%= inviteLink %>" target="_blank" style="color: var(--primary); text-decoration: none;">
-              <%= inviteLink %>
-            </a>
-          </div>
-          <a class="button primary" href="<%= inviteLink %>" target="_blank" style="margin-top: 12px;">Open Invite Link</a>
-        </div>
-      </div>
-    </div>
-  </div>
+      </main>
+    </div><!-- /main-content -->
+  </div><!-- /app-layout -->
 
   <script>
-    function switchTab(event, tabName) {
-      // Hide all tabs
-      document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-      });
+    // ── Tab switching ────────────────────────────────────────────────────────
+    const tabMap = {
+      'tab-status':   'nav-status',
+      'tab-profile':  'nav-profile',
+      'tab-presence': 'nav-presence',
+      'tab-settings': 'nav-settings',
+    };
 
-      // Remove active class from all buttons
-      document.querySelectorAll('.tab-button').forEach(btn => {
-        btn.classList.remove('active');
-      });
+    function switchTab(evt, tabId) {
+      // Deactivate all panels + nav items
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
-      // Show selected tab
-      document.getElementById(tabName).classList.add('active');
-      event.target.classList.add('active');
+      // Activate chosen
+      document.getElementById(tabId).classList.add('active');
+      const navId = tabMap[tabId];
+      if (navId) document.getElementById(navId).classList.add('active');
+
+      // Close sidebar on mobile
+      if (window.innerWidth < 900) closeSidebar();
+
+      // Save to hash
+      window.location.hash = tabId;
     }
 
-    // Theme toggle
-    document.getElementById('theme-toggle').addEventListener('click', () => {
-      document.documentElement.classList.toggle('dark');
-    });
+    // Restore tab from URL hash
+    (function() {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && document.getElementById(hash)) {
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById(hash).classList.add('active');
+        const navId = tabMap[hash];
+        if (navId) document.getElementById(navId).classList.add('active');
+      }
+    })();
+
+    // ── Sidebar ──────────────────────────────────────────────────────────────
+    function openSidebar() {
+      document.getElementById('sidebar').classList.add('open');
+      document.getElementById('sidebarOverlay').classList.add('active');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('active');
+    }
+
+    // ── Theme toggle ─────────────────────────────────────────────────────────
+    (function() {
+      const html = document.documentElement;
+      const btn = document.getElementById('themeToggle');
+      const saved = localStorage.getItem('tg-theme') || 'dark';
+      if (saved === 'light') html.classList.add('light');
+      btn.textContent = saved === 'light' ? '🌙' : '☀️';
+
+      btn.addEventListener('click', () => {
+        const isLight = html.classList.toggle('light');
+        localStorage.setItem('tg-theme', isLight ? 'light' : 'dark');
+        btn.textContent = isLight ? '🌙' : '☀️';
+      });
+    })();
+
+    // ── Copy invite ──────────────────────────────────────────────────────────
+    function copyInvite() {
+      const link = '<%= inviteLink %>';
+      navigator.clipboard.writeText(link).then(() => {
+        const btn = event.target;
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Link', 2000);
+      });
+    }
   </script>
 </body>
 </html>
