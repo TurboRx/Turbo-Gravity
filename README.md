@@ -1,6 +1,6 @@
 # Turbo Gravity
 
-A powerful, feature-rich Discord bot with an **optional web-based Control Panel**. Written in **Rust** using [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) for the bot and [Axum](https://github.com/tokio-rs/axum) for the dashboard API, with [Tokio](https://tokio.rs) as the async runtime.
+A powerful, feature-rich Discord bot with an **web-based Dashboard**. Written in **Rust** using [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) for the bot and [Axum](https://github.com/tokio-rs/axum) for the dashboard API, with [Tokio](https://tokio.rs) as the async runtime.
 
 ## Architecture
 
