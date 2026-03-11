@@ -206,8 +206,10 @@ port = 8080
         router().with_state(test_state())
     }
 
+    const TEST_MAX_BODY_SIZE: usize = 4 * 1024 * 1024;
+
     async fn body_string(b: Body) -> String {
-        let bytes = body::to_bytes(b, usize::MAX).await.unwrap();
+        let bytes = body::to_bytes(b, TEST_MAX_BODY_SIZE).await.unwrap();
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
