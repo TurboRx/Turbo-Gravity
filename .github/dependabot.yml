@@ -15,7 +15,7 @@ updates:
           - "minor"
           - "patch"
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -23,14 +23,11 @@ updates:
     commit-message:
       prefix: "chore"
     groups:
-      npm-dependencies:
+      actions:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "patch"
 
-  - package-ecosystem: "github-actions"
+  - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -38,6 +35,6 @@ updates:
     commit-message:
       prefix: "chore"
     groups:
-      actions:
+      docker-images:
         patterns:
           - "*"
