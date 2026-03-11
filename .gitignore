@@ -1,15 +1,7 @@
-node_modules/
+
 .env
 .env.*
-.config/
-npm-debug.log*
-yarn-error.log
 .DS_Store
-dist/
-.tmp/
-start.log
-*-backup.*
-*-old.*
 
 # Rust build artifacts (Cargo.lock is intentionally committed for binaries)
 target/
