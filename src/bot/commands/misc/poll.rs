@@ -44,11 +44,11 @@ pub async fn poll(
         .await?;
 
     if let Ok(msg) = reply.message().await {
-        for i in 0..options.len() {
+        for emoji in NUMBER_EMOJIS.iter().take(options.len()) {
             let _ = msg
                 .react(
                     ctx.http(),
-                    serenity::ReactionType::Unicode(NUMBER_EMOJIS[i].to_string()),
+                    serenity::ReactionType::Unicode((*emoji).to_string()),
                 )
                 .await;
         }

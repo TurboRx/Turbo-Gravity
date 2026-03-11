@@ -53,8 +53,44 @@ async fn main() -> anyhow::Result<()> {
         info!("Dashboard disabled (enable_dashboard = false in config.toml)");
     }
 
-    // Start the Poise Discord bot (blocks until shutdown)
-    bot::start(Arc::clone(&state)).await?;
+    // Start the Poise Discord bot (blocks until shutdown or signal)
+    tokio::select! {
+        res = bot::start(Arc::clone(&state)) => {
+            if let Err(e) = res {
+                tracing::error!("Bot exited with error: {e}");
+            }
+        }
+        _ = shutdown_signal() => {
+            info!("Shutdown signal received, exiting gracefully");
+        }
+    }
 
     Ok(())
+}
+
+/// Wait for SIGINT (Ctrl-C) or SIGTERM so the process can shut down cleanly.
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl-C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

@@ -1,64 +1,40 @@
-# Turbo Gravity
+<div align="center">
 
-A powerful, feature-rich Discord bot with an **web-based Dashboard**. Written in **Rust** using [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) for the bot and [Axum](https://github.com/tokio-rs/axum) for the dashboard API, with [Tokio](https://tokio.rs) as the async runtime.
+# 🚀 Turbo Gravity
 
-## Architecture
+[![CI](https://github.com/TurboRx/Turbo-Gravity/actions/workflows/ci.yml/badge.svg)](https://github.com/TurboRx/Turbo-Gravity/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
+[![Poise](https://img.shields.io/badge/poise-0.6-blue.svg)](https://github.com/serenity-rs/poise)
 
-```
-main.rs
-├── Arc<AppState>          ← shared state (config + optional MongoDB pool)
-│
-├── tokio::spawn → dashboard::serve()   ← optional Axum REST API (port 8080)
-│                  State<Arc<AppState>> ← same Arc injected into every route
-│
-└── bot::start()           ← Poise framework (blocks until shutdown)
-       ctx.data()          ← SharedState accessible in every command
-```
+**A production-ready, feature-rich Discord bot with an optional web dashboard.**  
+Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) and [Axum](https://github.com/tokio-rs/axum).
 
-### Key design decisions
-
-| Concern | Solution |
-|---|---|
-| Command framework | `poise 0.6` with `#[poise::command(slash_command)]` |
-| Shared state | `Arc<AppState>` — passed as Poise `Data` type and Axum `State` |
-| Dashboard toggle | `enable_dashboard = true/false` in `config.toml` |
-| Dashboard API | `axum 0.8` spawned via `tokio::spawn` before bot blocks |
-| Database | `mongodb 3` driver; bot operates without DB if URI is empty |
-| Configuration | `config.toml` (TOML) loaded at startup; `.env` also supported |
-| Async runtime | `tokio` with `full` features |
+</div>
 
 ---
 
-## Features
+## ✨ Features
 
-### Bot Commands
-
-| Category | Commands |
-|---|---|
-| **Fun** | `/daily`, `/work`, `/balance`, `/coinflip`, `/roll`, `/8ball` |
-| **Misc** | `/choose`, `/poll`, `/remind` |
-| **Moderation** | `/ban`, `/kick`, `/timeout`, `/warn`, `/warnings`, `/purge`, `/slowmode`, `/lock`, `/unlock`, `/unban` |
-| **Tickets** | `/ticket create`, `/ticket close`, `/ticket add`, `/ticket remove` |
-| **Utility** | `/ping`, `/uptime`, `/stats`, `/help`, `/userinfo`, `/serverinfo`, `/channelinfo`, `/roleinfo`, `/avatar`, `/embed`, `/contime` |
-
-### Optional Dashboard API
-
-When `enable_dashboard = true` in `config.toml`, an Axum HTTP server starts in parallel with the bot:
-
-| Route | Description |
-|---|---|
-| `GET /health` | Liveness probe — returns `{"status":"ok","version":"..."}` |
-| `GET /api/stats` | Runtime stats (DB connected, bot configured, port) |
-| `GET /api/config` | Public (non-secret) config values |
+- 🎮 **Fun Commands** — Daily rewards, work economy, balance, coin flip, dice roll, 8-ball
+- 🗳️ **Misc Commands** — Polls with reaction voting, reminders, random choice picker
+- 🔨 **Moderation** — Ban, kick, timeout, warn, warnings log, purge, slowmode, lock/unlock, unban
+- 🎫 **Ticket System** — Create, close, add/remove members from support tickets
+- 🛠️ **Utility** — Ping, uptime, stats, help, user/server/channel/role info, avatar, embed builder, connection time
+- 📊 **Optional Dashboard** — Axum HTTP API for liveness checks, runtime stats, and public config
+- 🗄️ **MongoDB Integration** — Persistent economy profiles and warning records (optional — bot runs fine without a DB)
+- 📡 **Structured Logging** — `tracing` + `tracing-subscriber` with `RUST_LOG` env-var control
+- 🛑 **Graceful Shutdown** — Handles SIGINT/SIGTERM for clean process exit
 
 ---
 
-## Quick Start
+## ⚡ Quick Start
 
 ### Prerequisites
-- Rust (stable, 1.75+) — install via [rustup](https://rustup.rs)
-- MongoDB (optional — bot works without a database)
+
+- [Rust (stable)](https://rustup.rs) — install via rustup
 - A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
+- MongoDB (optional — bot runs without a database)
 
 ### Installation
 
@@ -70,10 +46,9 @@ When `enable_dashboard = true` in `config.toml`, an Axum HTTP server starts in p
 
 2. **Configure the bot**
    ```bash
-   # config.toml is already present — edit it with your values
+   # Edit config.toml — at minimum set bot.token
    nano config.toml
    ```
-   At minimum you need `bot.token`. Everything else has sensible defaults.
 
 3. **Build and run**
    ```bash
@@ -84,7 +59,7 @@ The bot registers slash commands to the guild specified by `guild_id` (instant) 
 
 ---
 
-## Configuration (`config.toml`)
+## ⚙️ Configuration (`config.toml`)
 
 ```toml
 [bot]
@@ -111,17 +86,47 @@ Environment variables in a `.env` file are loaded automatically (via `dotenvy`) 
 
 ---
 
-## Docker Deployment
+## 🏗️ Architecture
 
-### Build locally
-
-```bash
-docker build -t turbo-gravity .
+```
+main.rs
+├── Arc<AppState>          ← shared state (config + optional MongoDB pool)
+│
+├── tokio::spawn → dashboard::serve()   ← optional Axum REST API (port 8080)
+│                  State<Arc<AppState>> ← same Arc injected into every route
+│
+└── bot::start()           ← Poise framework (blocks until shutdown)
+       ctx.data()          ← SharedState accessible in every command
 ```
 
-### Run
+| Concern | Solution |
+|---|---|
+| Command framework | `poise 0.6` with `#[poise::command(slash_command)]` |
+| Shared state | `Arc<AppState>` — passed as Poise `Data` type and Axum `State` |
+| Dashboard toggle | `enable_dashboard = true/false` in `config.toml` |
+| Dashboard API | `axum 0.8` spawned via `tokio::spawn` before bot blocks |
+| Database | `mongodb 3` driver; bot operates without DB if URI is empty |
+| Configuration | `config.toml` (TOML) loaded at startup; `.env` also supported |
+| Async runtime | `tokio` with `full` features |
+| Graceful shutdown | `tokio::signal` handles SIGINT + SIGTERM |
+
+### Dashboard API Endpoints
+
+| Route | Description |
+|---|---|
+| `GET /health` | Liveness probe — returns `{"status":"ok","version":"..."}` |
+| `GET /api/stats` | Runtime stats (DB connected, bot configured, port) |
+| `GET /api/config` | Public (non-secret) config values |
+
+---
+
+## 🐳 Docker Deployment
 
 ```bash
+# Build
+docker build -t turbo-gravity .
+
+# Run
 docker run -d \
   -p 8080:8080 \
   -v $(pwd)/config.toml:/app/config.toml:ro \
@@ -129,11 +134,11 @@ docker run -d \
   turbo-gravity
 ```
 
-The binary reads `config.toml` from its working directory at startup. Mount your config at `/app/config.toml` — **never bake secrets into the image**.
+Mount your `config.toml` at `/app/config.toml` — **never bake secrets into the image**.
 
 ---
 
-## Development
+## 🧑‍💻 Development
 
 ### Adding a new command
 
@@ -151,13 +156,13 @@ The binary reads `config.toml` from its working directory at startup. Mount your
    ```
 3. Add `mod mycommand;` and include `mycommand::mycommand()` in the `commands()` vec in `src/bot/commands/<category>/mod.rs`
 
-### Accessing shared state inside a command
+### Accessing shared state
 
 ```rust
 // ctx.data() returns &Arc<AppState>
-let db = match ctx.data().database() {
-    Some(db) => db,
-    None => { ctx.say("No database configured.").await?; return Ok(()); }
+let Some(db) = ctx.data().database() else {
+    ctx.say("No database configured.").await?;
+    return Ok(());
 };
 ```
 
@@ -165,13 +170,13 @@ let db = match ctx.data().database() {
 
 ```bash
 cargo check          # fast type-check
-cargo clippy         # lints
+cargo clippy -- -D warnings   # lints (CI-grade)
 cargo build --release
 ```
 
 ---
 
-## Security Notes
+## 🔒 Security Notes
 
 - **Never commit `config.toml`** with real tokens — it is listed in `.gitignore`
 - `session_secret` and `client_secret` are reserved for future OAuth2 support
@@ -181,18 +186,18 @@ cargo build --release
 
 ---
 
-## License
+## 📄 License
 
 [MIT](LICENSE)
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-We welcome contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for commit guidelines and the PR process. For major changes, open an issue first.
+We welcome contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the Rust workflow, commit guidelines, and PR process. For major changes, open an issue first.
 
 ---
 
-## Support
+## 💬 Support
 
 For issues or questions, open an issue on [GitHub](https://github.com/TurboRx/Turbo-Gravity/issues).
