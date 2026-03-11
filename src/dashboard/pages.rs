@@ -434,15 +434,75 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 ::-webkit-scrollbar-track  { background: var(--bg); }
 ::-webkit-scrollbar-thumb  { background: var(--bg3); border-radius: 3px; }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+/* ── Hamburger button (hidden on desktop) ────────────────────────────────── */
+.hamburger {
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+  cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.hamburger:hover { background: rgba(124,58,237,0.15); }
+.hamburger span {
+  display: block; width: 18px; height: 2px;
+  background: var(--text2); border-radius: 2px;
+  transition: transform 0.25s, opacity 0.25s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* ── Sidebar overlay (mobile backdrop) ───────────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── Sidebar: add slide transition ───────────────────────────────────────── */
+.sidebar { transition: transform 0.25s ease; }
+
+/* ── Responsive: tablet (≤ 1100px) ──────────────────────────────────────── */
 @media (max-width: 1100px) {
   .dashboard-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Responsive: mobile (≤ 768px) ───────────────────────────────────────── */
 @media (max-width: 768px) {
-  .sidebar         { transform: translateX(-220px); }
-  .main-wrapper    { margin-left: 0; }
+  .hamburger        { display: flex; }
+  .sidebar          { transform: translateX(-220px); }
+  .sidebar.open     { transform: translateX(0); }
+  .main-wrapper     { margin-left: 0; }
   .selector-content { margin-left: 0; }
-  .setup-grid      { grid-template-columns: 1fr; }
+  .setup-grid       { grid-template-columns: 1fr; }
+  .content          { padding: 16px; }
+  .topbar           { padding: 0 14px; gap: 8px; }
+  .topbar-site      { display: none; }
+  .topbar-sep       { display: none; }
+  .search-box       { display: none; }
+  .subgrid          { grid-template-columns: 1fr; }
+  .module-grid      { grid-template-columns: 1fr 1fr; }
+  .btn-actions      { flex-wrap: wrap; }
+}
+
+/* ── Responsive: small mobile (≤ 480px) ─────────────────────────────────── */
+@media (max-width: 480px) {
+  .content          { padding: 12px; }
+  .card             { padding: 14px; }
+  .module-grid      { grid-template-columns: 1fr; }
+  .btn-actions      { flex-direction: column; }
+  .btn-actions .btn { width: 100%; justify-content: center; }
+  .uptime-val       { font-size: 22px; }
+  .invite-link-box  { flex-direction: column; align-items: flex-start; }
+  .invite-link-box .btn { width: 100%; justify-content: center; }
+  .setup-card       { padding: 24px 16px; }
+  .error-card       { padding: 32px 20px; }
+  .error-code       { font-size: 56px; }
 }
 "#;
 
@@ -471,6 +531,15 @@ function toggleTheme() {
     h.className = 'dark';
     localStorage.setItem('theme', 'dark');
   }
+}
+function toggleSidebar() {
+  var sidebar  = document.getElementById('sidebar');
+  var overlay  = document.getElementById('sidebar-overlay');
+  var hamburger = document.getElementById('hamburger-btn');
+  if (!sidebar) return;
+  var isOpen = sidebar.classList.toggle('open');
+  if (overlay)   { overlay.classList.toggle('open', isOpen); }
+  if (hamburger) { hamburger.classList.toggle('open', isOpen); }
 }
 </script>"#;
 
@@ -517,7 +586,7 @@ fn build_sidebar(active: &str) -> String {
         })
         .collect();
     format!(
-        r#"<aside class="sidebar">
+        r#"<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="brand-dot">&#x26A1;</div>
     <span class="sidebar-brand-name">Turbo Gravity</span>
@@ -533,6 +602,9 @@ fn build_topbar(page_name: &str) -> String {
     format!(
         r#"<header class="topbar">
   <div class="topbar-left">
+    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
     <span class="topbar-site">Turbo Gravity</span>
     <span class="topbar-sep"> | </span>
     <span class="topbar-page">{page_name}</span>
