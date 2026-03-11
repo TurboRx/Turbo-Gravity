@@ -429,6 +429,33 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 .error-title   { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
 .error-message { color: var(--text2); margin-bottom: 24px; }
 
+/* ── Material Symbols icon sizing ────────────────────────────────────────── */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga' 1;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  vertical-align: middle;
+  user-select: none;
+}
+.nav-icon .material-symbols-rounded  { font-size: 18px; }
+.mi-brand  { font-size: 22px; font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 20; }
+.mi-card   { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.mi-module { font-size: 22px; font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.mi-btn    { font-size: 16px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.mi-setup  { font-size: 24px; font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.mi-topbar { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+
 /* ── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track  { background: var(--bg); }
@@ -512,15 +539,15 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 
 const THEME_SCRIPT: &str = r#"<script>
 (function() {
-  var t = localStorage.getItem('theme');
-  var h = document.documentElement;
+  const t = localStorage.getItem('theme');
+  const h = document.documentElement;
   if (t === 'light')       { h.className = 'light'; }
   else if (t === 'system') { h.className = ''; }
   else                     { h.className = 'dark'; }
 })();
 function toggleTheme() {
-  var h = document.documentElement;
-  var t = localStorage.getItem('theme') || 'dark';
+  const h = document.documentElement;
+  const t = localStorage.getItem('theme') || 'dark';
   if (t === 'dark') {
     h.className = 'light';
     localStorage.setItem('theme', 'light');
@@ -533,11 +560,11 @@ function toggleTheme() {
   }
 }
 function toggleSidebar() {
-  var sidebar  = document.getElementById('sidebar');
-  var overlay  = document.getElementById('sidebar-overlay');
-  var hamburger = document.getElementById('hamburger-btn');
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+  const hamburger = document.getElementById('hamburger-btn');
   if (!sidebar) return;
-  var isOpen = sidebar.classList.toggle('open');
+  const isOpen = sidebar.classList.toggle('open');
   if (overlay)   { overlay.classList.toggle('open', isOpen); }
   if (hamburger) { hamburger.classList.toggle('open', isOpen); }
 }
@@ -558,6 +585,7 @@ fn html_head(title: &str, extra_script: &str) -> String {
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0..1,0&amp;display=block" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   {THEME_SCRIPT}
   {extra_script}
@@ -569,18 +597,18 @@ fn html_head(title: &str, extra_script: &str) -> String {
 
 fn build_sidebar(active: &str) -> String {
     let items: &[(&str, &str, &str)] = &[
-        ("\u{1F3E0}", "Home",      "/dashboard"),
-        ("\u{1F4CA}", "Analytics", "/dashboard"),
-        ("\u{1F5A5}", "Servers",   "/selector"),
-        ("\u{1F9E9}", "Modules",   "/dashboard"),
-        ("\u{2699}",  "Settings",  "/setup"),
+        ("home",          "Home",      "/dashboard"),
+        ("bar_chart",     "Analytics", "/dashboard"),
+        ("dns",           "Servers",   "/selector"),
+        ("extension",     "Modules",   "/dashboard"),
+        ("settings",      "Settings",  "/setup"),
     ];
     let nav: String = items
         .iter()
         .map(|(icon, name, href)| {
             let cls = if *name == active { " active" } else { "" };
             format!(
-                r#"    <a href="{href}" class="nav-item{cls}"><span class="nav-icon">{icon}</span>{name}</a>
+                r#"    <a href="{href}" class="nav-item{cls}"><span class="nav-icon"><span class="material-symbols-rounded">{icon}</span></span>{name}</a>
 "#
             )
         })
@@ -588,7 +616,7 @@ fn build_sidebar(active: &str) -> String {
     format!(
         r#"<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
-    <div class="brand-dot">&#x26A1;</div>
+    <div class="brand-dot"><span class="material-symbols-rounded mi-brand">bolt</span></div>
     <span class="sidebar-brand-name">Turbo Gravity</span>
   </div>
   <nav class="sidebar-nav">
@@ -611,8 +639,8 @@ fn build_topbar(page_name: &str) -> String {
   </div>
   <div class="topbar-right">
     <input class="search-box" type="text" placeholder="Search&#x2026;" aria-label="Search" />
-    <button class="notif-btn" title="Notifications" aria-label="Notifications">&#x1F514;<span class="notif-dot"></span></button>
-    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">&#x1F319;</button>
+    <button class="notif-btn" title="Notifications" aria-label="Notifications"><span class="material-symbols-rounded mi-topbar">notifications</span><span class="notif-dot"></span></button>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><span class="material-symbols-rounded mi-topbar">dark_mode</span></button>
     <div class="avatar">TG</div>
   </div>
 </header>
@@ -656,6 +684,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
         r##"{head}
 <div class="layout">
 {sidebar}
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 <div class="main-wrapper">
 {topbar}
 <main class="content">
@@ -667,7 +696,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
       <!-- Server Analytics -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">&#x1F4C8; Server Analytics</span>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">show_chart</span> Server Analytics</span>
           <span class="card-badge">Last 30 days</span>
         </div>
         <div class="chart-wrap">
@@ -736,20 +765,20 @@ pub fn dashboard_page(data: &DashboardData) -> String {
       <!-- Quick Actions -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">&#x26A1; Quick Actions</span>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">bolt</span> Quick Actions</span>
         </div>
         <div class="btn-actions">
           <form method="POST" action="/control/restart" style="display:inline">
-            <button class="btn btn-primary" type="submit">&#x1F504; Restart Bot</button>
+            <button class="btn btn-primary" type="submit"><span class="material-symbols-rounded mi-btn">restart_alt</span> Restart Bot</button>
           </form>
           <form method="POST" action="/control/stop" style="display:inline">
-            <button class="btn btn-danger" type="submit">&#x23F9; Stop Bot</button>
+            <button class="btn btn-danger" type="submit"><span class="material-symbols-rounded mi-btn">stop_circle</span> Stop Bot</button>
           </form>
           <form method="POST" action="/control/clear-cache" style="display:inline">
-            <button class="btn btn-ghost" type="submit">&#x1F9F9; Clear Cache</button>
+            <button class="btn btn-ghost" type="submit"><span class="material-symbols-rounded mi-btn">mop</span> Clear Cache</button>
           </form>
           <form method="POST" action="/control/reload-commands" style="display:inline">
-            <button class="btn btn-cyan" type="submit">&#x1F501; Reload Commands</button>
+            <button class="btn btn-cyan" type="submit"><span class="material-symbols-rounded mi-btn">sync</span> Reload Commands</button>
           </form>
         </div>
         <form method="POST" action="/dashboard/settings">
@@ -771,7 +800,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
       <!-- Invite Link -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">&#x1F517; Invite Link</span>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">link</span> Invite Link</span>
           <span class="card-badge">permissions: {invite_perms}</span>
         </div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:8px">
@@ -780,7 +809,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
         <div class="invite-link-box">
           <span class="invite-link-text">{invite_link}</span>
           <a class="btn btn-primary" href="{invite_link}" target="_blank" rel="noopener noreferrer">
-            Open &#x2197;
+            Open <span class="material-symbols-rounded mi-btn">open_in_new</span>
           </a>
         </div>
       </div>
@@ -793,7 +822,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
       <!-- Bot Modules -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">&#x1F9E9; Bot Modules</span>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">extension</span> Bot Modules</span>
           <span class="card-badge">6 modules</span>
         </div>
         <div class="module-grid">
@@ -801,7 +830,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x1F6E1;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">shield</span></div>
                 <span class="module-name">Moderation</span>
               </div>
               <label class="toggle">
@@ -815,7 +844,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x1F4B0;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">payments</span></div>
                 <span class="module-name">Economy</span>
               </div>
               <label class="toggle">
@@ -829,7 +858,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x1F389;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">celebration</span></div>
                 <span class="module-name">Fun</span>
               </div>
               <label class="toggle">
@@ -843,7 +872,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x2B50;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">military_tech</span></div>
                 <span class="module-name">Leveling</span>
               </div>
               <label class="toggle">
@@ -855,7 +884,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x1F527;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">construction</span></div>
                 <span class="module-name">Utilities</span>
               </div>
               <label class="toggle">
@@ -869,7 +898,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <div class="module-card">
             <div class="module-header">
               <div class="module-icon-name">
-                <div class="module-icon">&#x1F3AB;</div>
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">confirmation_number</span></div>
                 <span class="module-name">Tickets</span>
               </div>
               <label class="toggle">
@@ -948,7 +977,7 @@ pub fn setup_page(data: &SetupData) -> String {
   <div class="setup-card">
 
     <div class="setup-header">
-      <div class="setup-logo">&#x26A1;</div>
+      <div class="setup-logo"><span class="material-symbols-rounded mi-setup">bolt</span></div>
       <h1>Turbo Gravity Setup</h1>
       <p>Configure your Discord bot &#x2014; no coding required.</p>
     </div>
@@ -958,7 +987,7 @@ pub fn setup_page(data: &SetupData) -> String {
       <!-- ── Section 1: Discord Credentials ──────────────────────── -->
       <div class="setup-section">
         <div class="setup-section-header">
-          <span class="setup-section-icon">&#x1F916;</span>
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">smart_toy</span></span>
           <span class="setup-section-title">Discord Credentials</span>
         </div>
         <div class="setup-grid">
@@ -980,7 +1009,7 @@ pub fn setup_page(data: &SetupData) -> String {
       <!-- ── Section 2: Database &amp; Security ─────────────────── -->
       <div class="setup-section">
         <div class="setup-section-header">
-          <span class="setup-section-icon">&#x1F5C4;</span>
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">storage</span></span>
           <span class="setup-section-title">Database &amp; Security</span>
         </div>
         <div class="setup-grid">
@@ -1002,7 +1031,7 @@ pub fn setup_page(data: &SetupData) -> String {
       <!-- ── Section 3: Bot Settings ─────────────────────────────── -->
       <div class="setup-section">
         <div class="setup-section-header">
-          <span class="setup-section-icon">&#x2699;</span>
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">settings</span></span>
           <span class="setup-section-title">Bot Settings</span>
         </div>
         <div class="setup-grid">
@@ -1017,11 +1046,11 @@ pub fn setup_page(data: &SetupData) -> String {
           <div class="setup-field">
             <label>Presence Type</label>
             <select name="presenceType">
-              <option value="0"{p0}>&#x1F3AE; Playing</option>
-              <option value="1"{p1}>&#x1F4FA; Streaming</option>
-              <option value="2"{p2}>&#x1F3B5; Listening</option>
-              <option value="3"{p3}>&#x1F440; Watching</option>
-              <option value="4"{p4}>&#x1F3C6; Competing</option>
+              <option value="0"{p0}>Playing</option>
+              <option value="1"{p1}>Streaming</option>
+              <option value="2"{p2}>Listening</option>
+              <option value="3"{p3}>Watching</option>
+              <option value="4"{p4}>Competing</option>
             </select>
           </div>
           <div class="setup-field">
@@ -1038,7 +1067,7 @@ pub fn setup_page(data: &SetupData) -> String {
         </div>
       </div>
 
-      <button class="setup-submit" type="submit">&#x1F4BE; Save &amp; Start</button>
+      <button class="setup-submit" type="submit"><span class="material-symbols-rounded mi-btn">save</span> Save &amp; Start</button>
     </form>
 
   </div>
@@ -1117,6 +1146,7 @@ pub fn selector_page(data: &SelectorData) -> String {
         r#"{head}
 <div class="layout">
 {sidebar}
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 <div class="main-wrapper">
 {topbar}
 <div class="selector-content">
@@ -1164,7 +1194,7 @@ pub fn error_page(data: &ErrorData) -> String {
     <div class="error-code">{code}</div>
     <div class="error-title">{title}</div>
     <div class="error-message">{msg}</div>
-    <a class="btn btn-primary" href="/dashboard">&#x2190; Back to Dashboard</a>
+    <a class="btn btn-primary" href="/dashboard"><span class="material-symbols-rounded mi-btn">arrow_back</span> Back to Dashboard</a>
   </div>
 </div>
 {foot}"#

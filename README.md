@@ -120,13 +120,19 @@ The optional web dashboard runs at `http://localhost:8080` (or the configured po
 
 #### Screenshots
 
-**Dark mode**
+**Dashboard — Dark mode** (default)
 ![Dashboard dark mode](docs/screenshots/dashboard-dark.png)
 
-**Light mode**
+**Dashboard — Light mode**
 ![Dashboard light mode](docs/screenshots/dashboard-light.png)
 
-**Setup wizard**
+**Mobile view** (390px — hamburger sidebar, responsive layout)
+
+| Dark | Light |
+|------|-------|
+| ![Mobile dark](docs/screenshots/dashboard-mobile.png) | ![Mobile light](docs/screenshots/dashboard-mobile-light.png) |
+
+**Setup wizard** (`/setup` — browser-based config, no file editing required)
 ![Setup wizard](docs/screenshots/setup.png)
 
 #### Dashboard Routes
