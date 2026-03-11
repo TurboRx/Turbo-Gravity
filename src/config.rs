@@ -1,9 +1,9 @@
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Top-level configuration, deserialized from `config.toml`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub bot: BotConfig,
     #[serde(default)]
@@ -14,7 +14,7 @@ pub struct Config {
 
 /// Bot configuration loaded from `[bot]` section of `config.toml`.
 #[allow(dead_code)] // client_id reserved for future OAuth2 use
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BotConfig {
     pub token: String,
     pub client_id: String,
@@ -28,7 +28,7 @@ pub struct BotConfig {
     pub presence_type: u8,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct DatabaseConfig {
     #[serde(default)]
     pub mongo_uri: String,
@@ -38,7 +38,7 @@ pub struct DatabaseConfig {
 // Fields like session_secret, client_secret, callback_url, and admin_ids
 // are intentionally included for future Discord OAuth2 login support.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DashboardConfig {
     #[serde(default = "default_enable_dashboard")]
     pub enable_dashboard: bool,
@@ -58,33 +58,38 @@ impl Default for DashboardConfig {
     fn default() -> Self {
         Self {
             enable_dashboard: false,
-            port: 8080,
+            port: DEFAULT_PORT,
             session_secret: String::new(),
             client_secret: String::new(),
-            callback_url: "http://localhost:8080/auth/discord/callback".into(),
+            callback_url: DEFAULT_CALLBACK_URL.into(),
             admin_ids: Vec::new(),
         }
     }
 }
 
+pub const DEFAULT_COMMAND_SCOPE: &str = "guild";
+pub const DEFAULT_PRESENCE_TEXT: &str = "Ready to serve";
+pub const DEFAULT_CALLBACK_URL: &str = "http://localhost:8080/auth/discord/callback";
+pub const DEFAULT_PORT: u16 = 8080;
+
 fn default_command_scope() -> String {
-    "guild".into()
+    DEFAULT_COMMAND_SCOPE.into()
 }
 
 fn default_presence_text() -> String {
-    "Ready to serve".into()
+    DEFAULT_PRESENCE_TEXT.into()
 }
 
 fn default_enable_dashboard() -> bool {
-    true
+    false
 }
 
 fn default_port() -> u16 {
-    8080
+    DEFAULT_PORT
 }
 
 fn default_callback_url() -> String {
-    "http://localhost:8080/auth/discord/callback".into()
+    DEFAULT_CALLBACK_URL.into()
 }
 
 /// Load `config.toml` from the current working directory.
@@ -94,6 +99,13 @@ pub fn load() -> anyhow::Result<Config> {
         .with_context(|| format!("Failed to read config file at '{}'", path.display()))?;
     let cfg: Config = toml::from_str(&raw).context("Failed to parse config.toml")?;
     Ok(cfg)
+}
+
+/// Serialize `Config` back to `config.toml` in the current working directory.
+pub fn save(cfg: &Config) -> anyhow::Result<()> {
+    let raw = toml::to_string_pretty(cfg).context("Failed to serialize config")?;
+    std::fs::write("config.toml", raw).context("Failed to write config.toml")?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -118,6 +130,7 @@ client_id = "123456"
         assert_eq!(cfg.bot.presence_text, "Ready to serve");
         assert_eq!(cfg.bot.presence_type, 0);
         assert!(cfg.database.mongo_uri.is_empty());
+        // No [dashboard] section → Default impl → enable_dashboard = false
         assert!(!cfg.dashboard.enable_dashboard);
         assert_eq!(cfg.dashboard.port, 8080);
     }
@@ -158,14 +171,68 @@ admin_ids = ["111", "222"]
         assert!(result.is_err(), "client_id is required");
     }
 
+    /// `DashboardConfig::default()` and the serde field default for `enable_dashboard`
+    /// must agree so that the behaviour is the same whether the `[dashboard]` section
+    /// is absent or present with all fields omitted.
     #[test]
-    fn dashboard_default_impl_matches_parsed_defaults() {
-        let default = DashboardConfig::default();
-        assert!(!default.enable_dashboard);
-        assert_eq!(default.port, 8080);
+    fn dashboard_enable_dashboard_defaults_are_consistent() {
+        // Case 1: no [dashboard] section at all → uses DashboardConfig::default()
+        let no_section: Config = toml::from_str(minimal_toml()).unwrap();
+        assert!(!no_section.dashboard.enable_dashboard);
+
+        // Case 2: [dashboard] section present but enable_dashboard omitted → uses serde default fn
+        let with_section: Config = toml::from_str(
+            r#"
+[bot]
+token = "t"
+client_id = "c"
+
+[dashboard]
+port = 8080
+"#,
+        )
+        .unwrap();
+        assert!(!with_section.dashboard.enable_dashboard,
+            "enable_dashboard serde default must match Default impl (both false)");
+
+        // DashboardConfig::default() itself
+        assert!(!DashboardConfig::default().enable_dashboard);
+        assert_eq!(DashboardConfig::default().port, 8080);
         assert_eq!(
-            default.callback_url,
-            "http://localhost:8080/auth/discord/callback"
+            DashboardConfig::default().callback_url,
+            "http://localhost:8080/auth/discord/callback",
         );
+    }
+
+    #[test]
+    fn config_round_trips_through_toml() {
+        let original: Config = toml::from_str(
+            r#"
+[bot]
+token = "tok"
+client_id = "cid"
+guild_id = "gid"
+command_scope = "guild"
+presence_text = "Playing"
+presence_type = 3
+
+[database]
+mongo_uri = "mongodb://localhost"
+
+[dashboard]
+enable_dashboard = true
+port = 9000
+admin_ids = ["42"]
+"#,
+        )
+        .unwrap();
+        let serialized = toml::to_string_pretty(&original).unwrap();
+        let restored: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(restored.bot.token, original.bot.token);
+        assert_eq!(restored.bot.presence_type, original.bot.presence_type);
+        assert_eq!(restored.database.mongo_uri, original.database.mongo_uri);
+        assert_eq!(restored.dashboard.enable_dashboard, original.dashboard.enable_dashboard);
+        assert_eq!(restored.dashboard.port, original.dashboard.port);
+        assert_eq!(restored.dashboard.admin_ids, original.dashboard.admin_ids);
     }
 }

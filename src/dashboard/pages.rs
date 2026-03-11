@@ -366,9 +366,38 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 
 pub struct SetupData {
     pub owner_id: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub callback_url: String,
+    pub mongo_uri: String,
+    pub session_secret: String,
+    pub guild_id: String,
+    pub port: u16,
+    pub presence_type: u8,
+    pub presence_text: String,
+    pub command_scope: String,
 }
 
 pub fn setup_page(data: &SetupData) -> String {
+    let scope_guild_sel = if data.command_scope != "global" { " selected" } else { "" };
+    let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
+    let presence_0 = if data.presence_type == 0 { " selected" } else { "" };
+    let presence_1 = if data.presence_type == 1 { " selected" } else { "" };
+    let presence_2 = if data.presence_type == 2 { " selected" } else { "" };
+    let presence_3 = if data.presence_type == 3 { " selected" } else { "" };
+    let presence_4 = if data.presence_type == 4 { " selected" } else { "" };
+
+    let callback_url = if data.callback_url.is_empty() {
+        // Use the shared constant from config with port substituted if custom
+        if data.port == crate::config::DEFAULT_PORT {
+            crate::config::DEFAULT_CALLBACK_URL.to_string()
+        } else {
+            format!("http://localhost:{}/auth/discord/callback", data.port)
+        }
+    } else {
+        data.callback_url.clone()
+    };
+
     format!(
         r#"{head}
   <style>
@@ -399,6 +428,10 @@ pub fn setup_page(data: &SetupData) -> String {
       border-radius: 14px;
     }}
     .form-section h3 {{ margin: 0 0 8px; font-size: 16px; }}
+    .hint {{ font-size: 12px; color: var(--muted); margin: 0; }}
+    .setup-actions {{ display: flex; gap: 12px; align-items: center; }}
+    .setup-status {{ font-size: 13px; color: var(--muted); display: none; }}
+    #setup-form:valid ~ .setup-status {{ display: block; }}
   </style>
   <main class="page setup-page">
     <section class="setup-card">
@@ -406,87 +439,104 @@ pub fn setup_page(data: &SetupData) -> String {
         <div class="dot"></div>
         <div>
           <h1>Turbo Gravity Setup</h1>
-          <p>Configure your Discord bot to get started</p>
+          <p>Configure your Discord bot — no coding required</p>
         </div>
       </div>
 
-      <form class="form setup-form" method="POST" action="/setup">
+      <form id="setup-form" class="form setup-form" method="POST" action="/setup">
+        <!-- ── Step 1: Discord credentials ─────────────────────────── -->
         <div class="form-section">
-          <h3>Discord Bot Credentials</h3>
+          <h3>🤖 Discord Bot Credentials</h3>
+          <p class="hint">Create a bot at <a href="https://discord.com/developers/applications" target="_blank" style="color:var(--primary)">discord.com/developers</a> and paste the values below.</p>
           <label>Bot Token
-            <input type="password" name="botToken" placeholder="Your Discord bot token" required />
+            <input type="password" name="botToken" placeholder="Paste your bot token here" required autocomplete="new-password" />
           </label>
           <div class="dual">
-            <label>Client ID
-              <input type="text" name="clientId" placeholder="Application client ID" required />
+            <label>Client ID (Application ID)
+              <input type="text" name="clientId" value="{client_id}" placeholder="e.g. 1234567890" required />
             </label>
             <label>Client Secret
-              <input type="password" name="clientSecret" placeholder="OAuth2 client secret" required />
+              <input type="password" name="clientSecret" value="{client_secret}" placeholder="OAuth2 client secret" autocomplete="new-password" />
             </label>
           </div>
-          <label>OAuth Callback URL
-            <input type="url" name="callbackUrl" value="http://localhost:8080/auth/discord/callback" required />
+          <label>OAuth2 Callback URL
+            <input type="url" name="callbackUrl" value="{callback_url}" required />
+            <span class="hint">Keep the default unless you're hosting on a custom domain.</span>
           </label>
         </div>
 
+        <!-- ── Step 2: Database & Security ─────────────────────────── -->
         <div class="form-section">
-          <h3>Database &amp; Security (MongoDB Optional)</h3>
-          <label>MongoDB URI (optional)
-            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" />
+          <h3>🗄️ Database &amp; Security</h3>
+          <label>MongoDB URI <span style="color:var(--muted)">(optional — enables economy &amp; moderation persistence)</span>
+            <input type="text" name="mongoUri" value="{mongo_uri}" placeholder="mongodb://localhost:27017/turbogravity" />
           </label>
           <label>Session Secret
-            <input type="password" name="sessionSecret" placeholder="Random secure string" required />
+            <input type="password" name="sessionSecret" value="{session_secret}" placeholder="Random secure string (auto-generated if empty)" autocomplete="new-password" />
           </label>
-          <label>Admin User IDs (comma-separated)
-            <input type="text" name="adminIds" placeholder="123456789,987654321" value="{owner_id}" required />
+          <label>Admin User IDs <span style="color:var(--muted)">(comma-separated Discord user IDs)</span>
+            <input type="text" name="adminIds" value="{owner_id}" placeholder="123456789,987654321" />
           </label>
         </div>
 
+        <!-- ── Step 3: Bot settings ─────────────────────────────────── -->
         <div class="form-section">
-          <h3>Bot Settings</h3>
+          <h3>⚙️ Bot Settings</h3>
           <div class="dual">
-            <label>Guild ID (optional)
-              <input type="text" name="guildId" placeholder="For guild-only commands" />
+            <label>Guild ID <span style="color:var(--muted)">(leave blank for global commands)</span>
+              <input type="text" name="guildId" value="{guild_id}" placeholder="Your server's ID" />
             </label>
-            <label>Port
-              <input type="number" name="port" value="8080" required />
+            <label>Dashboard Port
+              <input type="number" name="port" value="{port}" min="1" max="65535" required />
             </label>
           </div>
           <div class="dual">
             <label>Presence Type
               <select name="presenceType">
-                <option value="0">Playing</option>
-                <option value="2">Listening</option>
-                <option value="3">Watching</option>
-                <option value="5">Competing</option>
+                <option value="0"{p0}>🎮 Playing</option>
+                <option value="1"{p1}>📺 Streaming</option>
+                <option value="2"{p2}>🎵 Listening</option>
+                <option value="3"{p3}>👀 Watching</option>
+                <option value="4"{p4}>🏆 Competing</option>
               </select>
             </label>
             <label>Command Scope
               <select name="commandScope">
-                <option value="guild">Guild</option>
-                <option value="global">Global</option>
+                <option value="guild"{scope_guild}>Guild (instant, recommended)</option>
+                <option value="global"{scope_global}>Global (up to 1 hour delay)</option>
               </select>
             </label>
           </div>
           <label>Presence Text
-            <input type="text" name="presenceText" value="Ready to serve" />
-          </label>
-          <label>Invite Permissions
-            <input type="text" name="invitePermissions" value="8" />
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" name="autoStart" />
-            <span>Auto-start bot on launch</span>
+            <input type="text" name="presenceText" value="{presence_text}" placeholder="Ready to serve" />
           </label>
         </div>
 
-        <button class="button primary" type="submit">Save &amp; Start</button>
+        <div class="setup-actions">
+          <button class="button primary" type="submit">💾 Save &amp; Start</button>
+          <a class="button ghost" href="/dashboard">Cancel</a>
+        </div>
       </form>
     </section>
   </main>
 {foot}"#,
         head = html_head("Setup"),
+        client_id = html_escape(&data.client_id),
+        client_secret = html_escape(&data.client_secret),
+        callback_url = html_escape(&callback_url),
+        mongo_uri = html_escape(&data.mongo_uri),
+        session_secret = html_escape(&data.session_secret),
         owner_id = html_escape(&data.owner_id),
+        guild_id = html_escape(&data.guild_id),
+        port = data.port,
+        presence_text = html_escape(&data.presence_text),
+        p0 = presence_0,
+        p1 = presence_1,
+        p2 = presence_2,
+        p3 = presence_3,
+        p4 = presence_4,
+        scope_guild = scope_guild_sel,
+        scope_global = scope_global_sel,
         foot = html_foot(),
     )
 }

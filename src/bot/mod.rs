@@ -142,6 +142,26 @@ mod tests {
     }
 
     #[test]
+    fn presence_type_1_with_empty_url_falls_back_to_playing() {
+        // The function passes "" as the streaming URL.  An empty string is not a
+        // valid URL so serenity returns an error and the fallback (Playing) is used.
+        let a = presence_activity(1, "a stream");
+        assert_eq!(a.name, "a stream");
+        assert_eq!(a.kind, serenity::ActivityType::Playing);
+    }
+
+    #[test]
+    fn presence_type_1_with_valid_url_is_streaming() {
+        // Verify the streaming branch directly: serenity accepts a valid URL and
+        // returns ActivityType::Streaming.
+        let result = serenity::ActivityData::streaming("a stream", "https://twitch.tv/example");
+        assert!(result.is_ok());
+        let a = result.unwrap();
+        assert_eq!(a.kind, serenity::ActivityType::Streaming);
+        assert_eq!(a.name, "a stream");
+    }
+
+    #[test]
     fn presence_type_unknown_defaults_to_playing() {
         let a = presence_activity(99, "something");
         assert_eq!(a.kind, serenity::ActivityType::Playing);
