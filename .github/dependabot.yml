@@ -7,6 +7,14 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "chore"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -14,3 +22,7 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore"
+    groups:
+      actions:
+        patterns:
+          - "*"
