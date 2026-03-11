@@ -10,12 +10,9 @@ pub async fn balance(
 ) -> Result<(), Error> {
     let user = target.as_ref().unwrap_or_else(|| ctx.author());
 
-    let db = match ctx.data().database() {
-        Some(db) => db,
-        None => {
-            ctx.say("Database is unavailable.").await?;
-            return Ok(());
-        }
+    let Some(db) = ctx.data().database() else {
+        ctx.say("Database is unavailable.").await?;
+        return Ok(());
     };
 
     let profile = User::find_by_discord_id(&db, &user.id.to_string()).await?;

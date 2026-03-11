@@ -12,12 +12,9 @@ const XP_GAINED: i64 = 10;
 /// Claim your daily coin reward
 #[poise::command(slash_command, ephemeral)]
 pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
-    let db = match ctx.data().database() {
-        Some(db) => db,
-        None => {
-            ctx.say("Database is unavailable.").await?;
-            return Ok(());
-        }
+    let Some(db) = ctx.data().database() else {
+        ctx.say("Database is unavailable.").await?;
+        return Ok(());
     };
 
     let author = ctx.author();

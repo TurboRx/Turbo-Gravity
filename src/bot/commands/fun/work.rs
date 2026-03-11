@@ -24,12 +24,9 @@ const WORK_MESSAGES: &[&str] = &[
 /// Work to earn coins (1-hour cooldown)
 #[poise::command(slash_command, ephemeral)]
 pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
-    let db = match ctx.data().database() {
-        Some(db) => db,
-        None => {
-            ctx.say("Database is unavailable.").await?;
-            return Ok(());
-        }
+    let Some(db) = ctx.data().database() else {
+        ctx.say("Database is unavailable.").await?;
+        return Ok(());
     };
 
     let author = ctx.author();

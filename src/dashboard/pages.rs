@@ -1,8 +1,8 @@
-/// Inline HTML page generators for the Turbo Gravity dashboard.
-///
-/// These replace the former EJS templates (`views/*.ejs`) and the external
-/// CSS file (`public/styles.css`).  All markup is rendered by pure Rust string
-/// formatting so no template-engine dependency is needed.
+// Inline HTML page generators for the Turbo Gravity dashboard.
+//
+// These replace the former EJS templates (`views/*.ejs`) and the external
+// CSS file (`public/styles.css`).  All markup is rendered by pure Rust string
+// formatting so no template-engine dependency is needed.
 
 // ---------------------------------------------------------------------------
 // Shared CSS (was public/styles.css + per-page inline styles)

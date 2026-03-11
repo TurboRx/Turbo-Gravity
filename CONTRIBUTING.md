@@ -1,13 +1,12 @@
 # Contributing to Turbo Gravity
 
-Thank you for your interest in contributing to Turbo Gravity! We welcome contributions from the community and are excited to see what you'll bring to the project.
+Thank you for your interest in contributing to Turbo Gravity! This guide covers the standard Rust workflow for getting started, submitting changes, and keeping code quality high.
 
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
-- [How Can I Contribute?](#how-can-i-contribute)
 - [Getting Started](#getting-started)
-- [Development Process](#development-process)
+- [Development Workflow](#development-workflow)
 - [Code Style Guidelines](#code-style-guidelines)
 - [Commit Message Guidelines](#commit-message-guidelines)
 - [Pull Request Process](#pull-request-process)
@@ -18,52 +17,17 @@ Thank you for your interest in contributing to Turbo Gravity! We welcome contrib
 
 This project and everyone participating in it is expected to uphold a respectful and welcoming environment. Please be kind and courteous to others.
 
-## How Can I Contribute?
-
-### Reporting Bugs
-
-Before creating bug reports, please check the [issue tracker](https://github.com/TurboRx/Turbo-Gravity/issues) to see if the problem has already been reported. If it has and the issue is still open, add a comment to the existing issue instead of opening a new one.
-
-When creating a bug report, please include:
-
-- **A clear and descriptive title**
-- **Steps to reproduce the behavior**
-- **Expected behavior**
-- **Actual behavior**
-- **Screenshots** (if applicable)
-- **Environment details** (Node.js version, OS, etc.)
-- **Additional context** (error messages, logs, etc.)
-
-### Suggesting Enhancements
-
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
-
-- **A clear and descriptive title**
-- **A detailed description** of the proposed enhancement
-- **Use cases** explaining why this enhancement would be useful
-- **Possible implementation** (if you have ideas)
-
-### Pull Requests
-
-We actively welcome your pull requests! Here's how to contribute code:
-
-1. Fork the repository and create your branch from `main`
-2. Make your changes following our code style guidelines
-3. Test your changes thoroughly
-4. Update documentation if needed
-5. Submit a pull request
-
 ## Getting Started
 
 ### Prerequisites
 
-Before you begin, ensure you have:
-
-- Node.js 18 or higher
-- npm (comes with Node.js)
-- MongoDB (local installation or hosted service)
-- A Discord Application (create one at [Discord Developer Portal](https://discord.com/developers/applications))
-- Git
+- **Rust (stable)** — install via [rustup](https://rustup.rs):
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+- **Git**
+- **MongoDB** (optional — the bot runs without a database)
+- A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
 
 ### Setting Up Your Development Environment
 
@@ -73,46 +37,54 @@ Before you begin, ensure you have:
    cd Turbo-Gravity
    ```
 
-2. **Install Dependencies**
+2. **Configure the bot**
    ```bash
-   npm install
+   # Edit config.toml with your Discord bot token at minimum
+   nano config.toml
    ```
 
-3. **Configure the Application**
+3. **Check the build**
    ```bash
-   npm start
+   cargo check
    ```
-   Then navigate to `http://localhost:8080/setup` and configure your bot through the web interface.
 
-4. **Start Development**
+4. **Run in development mode**
    ```bash
-   npm run dev
+   RUST_LOG=debug cargo run
    ```
-   This uses nodemon to auto-restart on file changes.
 
 ### Project Structure
 
 ```
 Turbo-Gravity/
 ├── src/
-│   ├── commands/        # Discord bot commands
-│   ├── dashboard/       # Web dashboard routes and views
-│   ├── models/          # MongoDB models
-│   ├── BotManager.js    # Bot lifecycle management
-│   └── localConfig.js   # Configuration handling
-├── index.js             # Application entry point
-├── package.json         # Dependencies and scripts
-└── Dockerfile           # Docker configuration
+│   ├── bot/
+│   │   ├── commands/        # Slash command handlers (grouped by category)
+│   │   │   ├── fun/         # Economy commands (daily, work, balance, …)
+│   │   │   ├── misc/        # Misc commands (poll, remind, choose)
+│   │   │   ├── moderation/  # Mod tools (ban, kick, warn, …)
+│   │   │   ├── tickets/     # Ticket system
+│   │   │   └── utility/     # Utility commands (ping, userinfo, …)
+│   │   └── mod.rs           # Poise framework setup
+│   ├── dashboard/           # Optional Axum HTTP dashboard
+│   ├── db/                  # MongoDB connection + data models
+│   ├── config.rs            # Config deserialization (config.toml)
+│   ├── state.rs             # Shared AppState (Arc<AppState>)
+│   └── main.rs              # Entry point, graceful shutdown
+├── config.toml              # Bot configuration (not committed with secrets)
+├── Cargo.toml               # Rust dependencies
+├── Dockerfile               # Multi-stage Docker build
+└── rust-toolchain.toml      # Pins the Rust toolchain channel
 ```
 
-## Development Process
+## Development Workflow
 
 ### Branching Strategy
 
-- `main` - Production-ready code
-- `feature/*` - New features
-- `bugfix/*` - Bug fixes
-- `docs/*` - Documentation changes
+- `main` — Production-ready code
+- `feature/*` — New features
+- `bugfix/*` — Bug fixes
+- `docs/*` — Documentation changes
 
 ### Making Changes
 
@@ -123,10 +95,12 @@ Turbo-Gravity/
 
 2. **Make your changes** in small, logical commits
 
-3. **Test your changes** thoroughly:
-   - Run the application and test affected functionality
-   - Test the web dashboard if you modified UI/routes
-   - Test bot commands if you modified command files
+3. **Run the standard checks** (same checks run in CI):
+   ```bash
+   cargo check                    # fast type-check
+   cargo clippy -- -D warnings    # lints — must pass with zero warnings
+   cargo build --release          # verify release build
+   ```
 
 4. **Keep your branch updated** with main:
    ```bash
@@ -136,98 +110,110 @@ Turbo-Gravity/
 
 ## Code Style Guidelines
 
-### JavaScript/Node.js
+### Rust
 
-- Use **ES6+ syntax** (import/export, arrow functions, etc.)
-- Use **async/await** over promises where possible
-- Use **2 spaces** for indentation
-- Use **single quotes** for strings
-- Use **semicolons** at the end of statements
-- Use **descriptive variable names** (no single-letter variables except in loops)
-- Add **JSDoc comments** for functions and classes
+- Follow the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)
+- Use `rustfmt` for formatting — run `cargo fmt` before committing
+- Pass `cargo clippy -- -D warnings` with zero errors before submitting a PR
+- Use modern idioms: `let-else` for early-return patterns, `?` for error propagation
+- Prefer `anyhow::Result` for command-level errors and `thiserror` for library-level types
+- Use `tracing::info!` / `tracing::error!` for logging — **never** `println!` in production paths
 
-### Discord Commands
+### Adding a New Command
 
-When creating new Discord commands:
+1. Create `src/bot/commands/<category>/mycommand.rs`
+2. Write the handler:
+   ```rust
+   use crate::bot::{Context, Error};
 
-```javascript
-import { SlashCommandBuilder } from 'discord.js';
+   /// Brief description shown in Discord's /help autocomplete
+   #[poise::command(slash_command, ephemeral)]
+   pub async fn mycommand(ctx: Context<'_>) -> Result<(), Error> {
+       ctx.say("Hello!").await?;
+       Ok(())
+   }
+   ```
+3. Register it in `src/bot/commands/<category>/mod.rs`:
+   ```rust
+   mod mycommand;
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('commandname')
-    .setDescription('Clear description of what this command does'),
-  
-  async execute(interaction) {
-    // Command logic here
-    await interaction.reply('Response');
-  }
+   pub fn commands() -> Vec<Command<SharedState, Error>> {
+       vec![
+           // … existing commands …
+           mycommand::mycommand(),
+       ]
+   }
+   ```
+
+### Accessing the Database
+
+Use the `let-else` idiom for early-return on missing DB:
+
+```rust
+let Some(db) = ctx.data().database() else {
+    ctx.say("Database is unavailable.").await?;
+    return Ok(());
 };
 ```
 
-- Place commands in the appropriate category folder under `src/commands/`
-- Use clear, concise command names and descriptions
-- Handle errors gracefully with try/catch blocks
-- Respond to interactions within 3 seconds (use `deferReply` for longer operations)
+### Guild-only Commands
 
-### Dashboard Routes
+Add `guild_only` to the command attribute and guard against DM invocations:
 
-- Follow RESTful conventions for routes
-- Validate user input and sanitize data
-- Use proper HTTP status codes
-- Include error handling middleware
-- Protect admin routes with authentication checks
+```rust
+#[poise::command(slash_command, guild_only, required_permissions = "MODERATE_MEMBERS")]
+pub async fn mymod(ctx: Context<'_>) -> Result<(), Error> {
+    // guild_only + poise guarantees ctx.guild_id() is Some
+    let guild_id = ctx.guild_id().unwrap();
+    // …
+}
+```
 
 ## Commit Message Guidelines
 
-Write clear and meaningful commit messages:
-
 - Use the present tense ("Add feature" not "Added feature")
-- Use the imperative mood ("Move cursor to..." not "Moves cursor to...")
+- Use the imperative mood ("Move cursor to…" not "Moves cursor to…")
 - Limit the first line to 72 characters or less
 - Reference issues and pull requests when applicable
 
 Examples:
 ```
-Add user profile command
-Fix dashboard crash on invalid session
-Update README with Docker instructions
-Refactor authentication middleware
+Add /leaderboard command for top economy users
+Fix infinite level-up loop in /daily XP calculation
+Update README with Docker deployment instructions
+Refactor DB upsert to use let-else idiom
 ```
 
 ## Pull Request Process
 
-1. **Update Documentation**
-   - Update the README.md if you changed functionality
-   - Add JSDoc comments to new functions
-   - Update relevant documentation files
+1. **Ensure all CI checks pass**:
+   - `cargo check` ✅
+   - `cargo clippy -- -D warnings` ✅
+   - `cargo build --release` ✅
 
-2. **Ensure Your PR**
-   - Has a clear title describing the change
-   - Includes a description of what changed and why
-   - References any related issues (e.g., "Fixes #123")
-   - Has been tested and works as expected
-   - Follows the code style guidelines
+2. **Update documentation** if you changed or added functionality
 
-3. **PR Template**
+3. **PR Template**:
    ```markdown
    ## Description
    Brief description of changes
-   
+
    ## Type of Change
    - [ ] Bug fix
    - [ ] New feature
    - [ ] Breaking change
    - [ ] Documentation update
-   
-   ## Testing
-   How did you test these changes?
-   
+
+   ## Checklist
+   - [ ] `cargo clippy -- -D warnings` passes
+   - [ ] Code follows project style guidelines
+   - [ ] Related issues are referenced
+
    ## Related Issues
    Fixes #(issue)
    ```
 
-4. **Review Process**
+4. **Review Process**:
    - Maintainers will review your PR
    - Address any feedback or requested changes
    - Once approved, your PR will be merged
@@ -241,8 +227,8 @@ Found a bug? Please create an issue with:
 - **Steps to Reproduce**: Step-by-step instructions
 - **Expected Behavior**: What you expected to happen
 - **Actual Behavior**: What actually happened
-- **Environment**: OS, Node.js version, etc.
-- **Logs/Screenshots**: Any relevant error messages or screenshots
+- **Environment**: OS, Rust version (`rustc --version`), etc.
+- **Logs**: Set `RUST_LOG=debug` and include relevant output
 
 ## Suggesting Enhancements
 
@@ -257,11 +243,8 @@ Have an idea? Create an enhancement issue with:
 
 ## Questions?
 
-If you have questions about contributing, feel free to:
-
 - Open an issue with the `question` label
-- Join our community discussions
-- Reach out to the maintainers
+- Join our community discussions on [GitHub Discussions](https://github.com/TurboRx/Turbo-Gravity/discussions)
 
 ## Recognition
 

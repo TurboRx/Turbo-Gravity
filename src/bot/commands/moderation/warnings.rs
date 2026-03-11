@@ -22,13 +22,10 @@ pub async fn warnings(
         .guild_id()
         .ok_or_else(|| anyhow::anyhow!("Not in a guild"))?
         .to_string();
-    let db = match ctx.data().database() {
-        Some(db) => db,
-        None => {
-            ctx.say("Database is unavailable. Warnings cannot be retrieved.")
-                .await?;
-            return Ok(());
-        }
+    let Some(db) = ctx.data().database() else {
+        ctx.say("Database is unavailable. Warnings cannot be retrieved.")
+            .await?;
+        return Ok(());
     };
 
     let page = page.unwrap_or(1).saturating_sub(1) as u64;
