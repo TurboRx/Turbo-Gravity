@@ -3,9 +3,9 @@ use axum::{
     http::{header, StatusCode},
     response::{Html, IntoResponse, Json, Response},
     routing::get,
-    Router,
+    Form, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::state::SharedState;
 use super::pages::{
@@ -120,8 +120,19 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
 
 /// GET /setup — first-run setup wizard page
 async fn setup_page(State(state): State<SharedState>) -> Html<String> {
-    let owner_id = state.config.dashboard.admin_ids.first().cloned().unwrap_or_default();
-    let data = SetupData { owner_id };
+    let data = SetupData {
+        owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
+        client_id: state.config.bot.client_id.clone(),
+        client_secret: state.config.dashboard.client_secret.clone(),
+        callback_url: state.config.dashboard.callback_url.clone(),
+        mongo_uri: state.config.database.mongo_uri.clone(),
+        session_secret: state.config.dashboard.session_secret.clone(),
+        guild_id: state.config.bot.guild_id.clone(),
+        port: state.config.dashboard.port,
+        presence_type: state.config.bot.presence_type,
+        presence_text: state.config.bot.presence_text.clone(),
+        command_scope: state.config.bot.command_scope.clone(),
+    };
     Html(pages::setup_page(&data))
 }
 
@@ -151,6 +162,190 @@ async fn not_found() -> Response {
 }
 
 // ---------------------------------------------------------------------------
+// Setup form submission
+// ---------------------------------------------------------------------------
+
+/// Form fields submitted from the /setup page.
+#[derive(Deserialize)]
+pub struct SetupForm {
+    #[serde(rename = "botToken", default)]
+    pub bot_token: String,
+    #[serde(rename = "clientId", default)]
+    pub client_id: String,
+    #[serde(rename = "clientSecret", default)]
+    pub client_secret: String,
+    #[serde(rename = "callbackUrl", default)]
+    pub callback_url: String,
+    #[serde(rename = "mongoUri", default)]
+    pub mongo_uri: String,
+    #[serde(rename = "sessionSecret", default)]
+    pub session_secret: String,
+    #[serde(rename = "adminIds", default)]
+    pub admin_ids: String,
+    #[serde(rename = "guildId", default)]
+    pub guild_id: String,
+    #[serde(default = "default_port_str")]
+    pub port: String,
+    #[serde(rename = "presenceType", default)]
+    pub presence_type: String,
+    #[serde(rename = "presenceText", default)]
+    pub presence_text: String,
+    #[serde(rename = "commandScope", default)]
+    pub command_scope: String,
+}
+
+fn default_port_str() -> String {
+    "8080".to_string()
+}
+
+/// `POST /setup` — save the wizard form to `config.toml` and redirect to `/dashboard`.
+async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
+    use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
+
+    // Validate port
+    let port: u16 = match form.port.parse() {
+        Ok(p) if p > 0 => p,
+        _ => {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Port".to_string(),
+                message: format!("Port must be a positive number, got '{}'", form.port),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    };
+
+    // Validate presence_type
+    let presence_type: u8 = match form.presence_type.parse() {
+        Ok(pt) if pt <= 4 => pt,
+        _ => {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Presence Type".to_string(),
+                message: format!("Presence type must be 0-4, got '{}'", form.presence_type),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    };
+
+    // Validate and parse admin_ids
+    let admin_ids: Vec<String> = form
+        .admin_ids
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    // Validate each admin_id is a valid u64 (Discord snowflake)
+    for admin_id in &admin_ids {
+        if admin_id.parse::<u64>().is_err() {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Admin ID".to_string(),
+                message: format!("Admin ID '{}' must be a valid Discord snowflake (numeric)", admin_id),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    }
+
+    // Validate client_id if provided
+    if !form.client_id.trim().is_empty() && form.client_id.parse::<u64>().is_err() {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Client ID".to_string(),
+            message: format!("Client ID must be a valid Discord snowflake (numeric), got '{}'", form.client_id),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
+
+    // Validate guild_id if provided
+    if !form.guild_id.trim().is_empty() && form.guild_id.parse::<u64>().is_err() {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Guild ID".to_string(),
+            message: format!("Guild ID must be a valid Discord snowflake (numeric), got '{}'", form.guild_id),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
+
+    // Validate MongoDB URI if provided
+    if !form.mongo_uri.trim().is_empty()
+        && !form.mongo_uri.starts_with("mongodb://")
+        && !form.mongo_uri.starts_with("mongodb+srv://") {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid MongoDB URI".to_string(),
+            message: "MongoDB URI must start with 'mongodb://' or 'mongodb+srv://'".to_string(),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
+
+    let callback_url = if form.callback_url.is_empty() {
+        format!("http://localhost:{port}/auth/discord/callback")
+    } else {
+        form.callback_url.clone()
+    };
+
+    let command_scope = if form.command_scope.is_empty() {
+        crate::config::DEFAULT_COMMAND_SCOPE.to_string()
+    } else if form.command_scope == "guild" || form.command_scope == "global" {
+        form.command_scope.clone()
+    } else {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Command Scope".to_string(),
+            message: format!("Command scope must be 'guild' or 'global', got '{}'", form.command_scope),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    };
+
+    let presence_text = if form.presence_text.is_empty() {
+        crate::config::DEFAULT_PRESENCE_TEXT.to_string()
+    } else {
+        form.presence_text.clone()
+    };
+
+    let cfg = Config {
+        bot: BotConfig {
+            token: form.bot_token.clone(),
+            client_id: form.client_id.clone(),
+            guild_id: form.guild_id.clone(),
+            command_scope,
+            presence_text,
+            presence_type,
+        },
+        database: DatabaseConfig {
+            mongo_uri: form.mongo_uri.clone(),
+        },
+        dashboard: DashboardConfig {
+            enable_dashboard: true,
+            port,
+            session_secret: form.session_secret.clone(),
+            client_secret: form.client_secret.clone(),
+            callback_url,
+            admin_ids,
+        },
+    };
+
+    match crate::config::save(&cfg) {
+        Ok(()) => (
+            StatusCode::FOUND,
+            [(header::LOCATION, "/dashboard")],
+        )
+            .into_response(),
+        Err(e) => {
+            let data = ErrorData {
+                code: 500,
+                title: "Setup Failed".to_string(),
+                message: format!("Could not save config.toml: {e}"),
+            };
+            (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -163,11 +358,338 @@ pub fn router() -> Router<SharedState> {
         // HTML pages
         .route("/", get(root))
         .route("/dashboard", get(dashboard_page))
-        .route("/setup", get(setup_page))
+        .route("/setup", get(setup_page).post(setup_submit))
         .route("/selector", get(selector_page))
         // JSON API
         .route("/health", get(health))
         .route("/api/stats", get(stats))
         .route("/api/config", get(public_config))
         .fallback(not_found)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use axum::{
+        body::{self, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    use crate::{config, state};
+
+    fn test_state() -> state::SharedState {
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = "test-token"
+client_id = "123456"
+guild_id = "999"
+
+[dashboard]
+enable_dashboard = true
+port = 8080
+"#,
+        )
+        .expect("test config must parse");
+        Arc::new(state::AppState::new(cfg, None))
+    }
+
+    fn test_app() -> axum::Router {
+        router().with_state(test_state())
+    }
+
+    const TEST_MAX_BODY_SIZE: usize = 4 * 1024 * 1024;
+
+    async fn body_string(b: Body) -> String {
+        let bytes = body::to_bytes(b, TEST_MAX_BODY_SIZE).await.unwrap();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    // ------------------------------------------------------------------
+    // /health
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn health_returns_200() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn health_body_contains_ok_status() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["status"], "ok");
+        assert!(v["version"].is_string());
+    }
+
+    // ------------------------------------------------------------------
+    // /api/stats
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn api_stats_returns_200() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_stats_bot_configured_true_when_token_set() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["bot_configured"], true);
+        assert_eq!(v["database_connected"], false);
+        assert_eq!(v["dashboard_port"], 8080);
+    }
+
+    #[tokio::test]
+    async fn api_stats_bot_configured_false_when_no_token() {
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let app = router().with_state(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["bot_configured"], false);
+    }
+
+    // ------------------------------------------------------------------
+    // /api/config
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn api_config_returns_200() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_config_fields() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["command_scope"], "guild");
+        assert_eq!(v["guild_id"], "999");
+        assert_eq!(v["dashboard_port"], 8080);
+        assert_eq!(v["enable_dashboard"], true);
+    }
+
+    // ------------------------------------------------------------------
+    // HTML pages
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn root_redirects_to_dashboard() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            resp.headers().get("location").unwrap(),
+            "/dashboard"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/dashboard")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("text/html"), "expected text/html, got {ct}");
+    }
+
+    #[tokio::test]
+    async fn setup_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn selector_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/selector")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // ------------------------------------------------------------------
+    // Static asset
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn styles_css_returns_css_content_type() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/styles.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("text/css"), "expected text/css, got {ct}");
+    }
+
+    // ------------------------------------------------------------------
+    // Fallback / 404
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn unknown_route_returns_404() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/this-route-does-not-exist")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    // ------------------------------------------------------------------
+    // POST /setup
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn setup_post_with_valid_form_saves_config_and_redirects() {
+        use axum::http::{header, Method};
+
+        // Write a temporary config.toml so the save path exists during the test
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        std::fs::write(&config_path, "").unwrap();
+
+        // Change working directory to temp_dir so config::save writes there
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let body = "botToken=mytoken&clientId=123456789012345678&clientSecret=&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fdiscord%2Fcallback&mongoUri=&sessionSecret=&adminIds=&guildId=&port=8080&presenceType=0&presenceText=Ready&commandScope=guild";
+
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/setup")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Restore working directory
+        std::env::set_current_dir(&original_dir).unwrap();
+
+        // On success the handler redirects to /dashboard
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(resp.headers().get("location").unwrap(), "/dashboard");
+
+        // Verify config.toml was written with the submitted values
+        let written = std::fs::read_to_string(&config_path).unwrap();
+        assert!(written.contains("mytoken"));
+        assert!(written.contains("123456789012345678"));
+    }
+
+    #[tokio::test]
+    async fn setup_page_get_prepopulates_existing_config() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        // The test state has client_id "123456" which should appear in the pre-filled form
+        assert!(text.contains("123456"));
+    }
 }

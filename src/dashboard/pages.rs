@@ -1,208 +1,580 @@
 // Inline HTML page generators for the Turbo Gravity dashboard.
 //
-// These replace the former EJS templates (`views/*.ejs`) and the external
-// CSS file (`public/styles.css`).  All markup is rendered by pure Rust string
-// formatting so no template-engine dependency is needed.
+// Modern redesign: fixed left sidebar, topbar, card-based layout.
+// All CSS lives in STYLES (served at /styles.css).
+// Theme JS lives in THEME_SCRIPT (raw str constant – no format-escape worries).
 
 // ---------------------------------------------------------------------------
-// Shared CSS (was public/styles.css + per-page inline styles)
+// Shared CSS  (served at /styles.css)
 // ---------------------------------------------------------------------------
 
-pub const STYLES: &str = r#":root {
-  --bg: #050b18;
-  --bg-accent: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(234, 179, 8, 0.2));
-  --panel: rgba(255, 255, 255, 0.04);
-  --panel-strong: rgba(255, 255, 255, 0.08);
-  --text: #e5e9f0;
-  --muted: #8aa0b5;
-  --primary: #0ea5e9;
-  --primary-strong: #0284c7;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --shadow: 0 15px 50px rgba(0, 0, 0, 0.35);
+pub const STYLES: &str = r#"
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Variables: dark (default) ───────────────────────────────────────────── */
+:root, html.dark {
+  --bg:      #0b0e1a;
+  --bg2:     #111527;
+  --bg3:     #161b30;
+  --card:    #13172a;
+  --text:    #e8eaf0;
+  --text2:   #9aa3be;
+  --text3:   #5c6585;
+  --purple:  #7c3aed;
+  --purple2: #9d5cf0;
+  --cyan:    #06b6d4;
+  --green:   #10b981;
+  --red:     #ef4444;
+  --border:  rgba(255,255,255,0.07);
+  --shadow:  0 4px 24px rgba(0,0,0,0.4);
 }
 
-:root:not(.dark) {
-  --bg: #f6f9fc;
-  --bg-accent: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(234, 179, 8, 0.12));
-  --panel: #ffffff;
-  --panel-strong: #ffffff;
-  --text: #0b1628;
-  --muted: #52627a;
-  --primary: #0284c7;
-  --primary-strong: #0369a1;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+/* ── Variables: light ────────────────────────────────────────────────────── */
+html.light {
+  --bg:     #f0f2f9;
+  --bg2:    #ffffff;
+  --bg3:    #f4f6fb;
+  --card:   #ffffff;
+  --text:   #0f1427;
+  --text2:  #4b5379;
+  --text3:  #9aa3be;
+  --border: rgba(0,0,0,0.08);
+  --shadow: 0 4px 24px rgba(0,0,0,0.1);
 }
 
-* { box-sizing: border-box; }
+/* ── Variables: system/device default (no explicit class) ────────────────── */
+@media (prefers-color-scheme: light) {
+  :root:not(.dark):not(.light) {
+    --bg:     #f0f2f9;
+    --bg2:    #ffffff;
+    --bg3:    #f4f6fb;
+    --card:   #ffffff;
+    --text:   #0f1427;
+    --text2:  #4b5379;
+    --text3:  #9aa3be;
+    --border: rgba(0,0,0,0.08);
+    --shadow: 0 4px 24px rgba(0,0,0,0.1);
+  }
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
 }
-
 a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
 
-.backdrop {
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.layout { display: flex; min-height: 100vh; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
   position: fixed;
-  inset: 0;
-  background: var(--bg-accent);
-  filter: blur(80px);
-  z-index: 0;
+  top: 0; left: 0;
+  z-index: 100;
 }
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.sidebar-brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 24px;
-  background: rgba(5, 11, 24, 0.6);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 10px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.brand-dot {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+.sidebar-brand-name { font-weight: 700; font-size: 15px; color: var(--text); }
+.sidebar-nav {
+  padding: 12px 10px;
+  flex: 1;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--text2);
+  font-size: 13.5px; font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-item:hover { background: rgba(124,58,237,0.1); color: var(--text); }
+.nav-item.active { background: rgba(124,58,237,0.15); color: var(--purple2); }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+/* ── Main wrapper ────────────────────────────────────────────────────────── */
+.main-wrapper {
+  margin-left: 220px; flex: 1;
+  display: flex; flex-direction: column; min-height: 100vh;
 }
 
-.brand { display: flex; gap: 12px; align-items: center; }
-.brand h1 { margin: 0; font-size: 18px; }
-.brand p { margin: 2px 0 0; color: var(--muted); }
-.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 16px var(--primary); }
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.topbar {
+  height: 60px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar-left { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.topbar-site { font-weight: 700; color: var(--text); }
+.topbar-sep  { color: var(--text3); }
+.topbar-page { color: var(--text2); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.search-box {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 12px;
+  color: var(--text); font-size: 13px; width: 200px; outline: none;
+}
+.search-box::placeholder { color: var(--text3); }
+.search-box:focus { border-color: var(--purple); }
+.notif-btn, .theme-btn {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text2); font-size: 15px; position: relative;
+  transition: background 0.15s, color 0.15s;
+}
+.notif-btn:hover, .theme-btn:hover { background: rgba(124,58,237,0.15); color: var(--text); }
+.notif-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
+  position: absolute; top: 6px; right: 6px;
+}
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12px; color: #fff; cursor: pointer;
+}
 
-.topbar-actions { display: flex; gap: 12px; align-items: center; }
-.user-chip { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; }
-.pill { padding: 4px 8px; border-radius: 999px; background: var(--panel-strong); font-size: 12px; color: var(--muted); }
+/* ── Content area ────────────────────────────────────────────────────────── */
+.content { padding: 24px; flex: 1; }
 
-.page { position: relative; z-index: 1; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-
-.hero {
+/* ── Dashboard two-column grid ───────────────────────────────────────────── */
+.dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr 360px;
   gap: 20px;
-  padding: 24px;
-  background: var(--panel);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
+  align-items: start;
 }
+.col-left, .col-right { display: flex; flex-direction: column; gap: 20px; }
 
-.hero h2 { margin: 6px 0 10px; }
-.hero .muted { color: var(--muted); margin: 0; }
-.hero-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-
-.hero-card {
-  background: var(--panel-strong);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 18px;
-  box-shadow: var(--shadow);
-}
-
-.grid.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-
+/* ── Cards ───────────────────────────────────────────────────────────────── */
 .card {
-  background: var(--panel);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-badge {
+  font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  background: rgba(124,58,237,0.15); color: var(--purple2); font-weight: 500;
 }
 
-.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.eyebrow { text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; color: var(--muted); margin: 0; }
+/* ── SVG chart ───────────────────────────────────────────────────────────── */
+.chart-wrap {
+  width: 100%; height: 140px;
+  border-radius: 8px; overflow: hidden; background: var(--bg3);
+}
+.chart-wrap svg { width: 100%; height: 100%; }
+.chart-legend { display: flex; gap: 16px; margin-top: 10px; }
+.legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text2);
+}
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 
-.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-.button {
-  border: none;
-  border-radius: 12px;
-  padding: 12px 16px;
-  background: var(--panel-strong);
-  color: #fff;
-  cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.2s ease;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 14px;
-  font-weight: 500;
+/* ── Bot subgrid ─────────────────────────────────────────────────────────── */
+.subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.subcard {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px;
+}
+.subcard-title {
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;
+}
+.server-list { display: flex; flex-direction: column; gap: 8px; }
+.server-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text2);
+}
+.server-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+}
+.uptime-val { font-size: 28px; font-weight: 700; color: var(--text); }
+.uptime-label { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.uptime-bar-wrap {
+  height: 6px; background: var(--bg3); border-radius: 3px;
+  margin-top: 10px; overflow: hidden;
+}
+.uptime-bar {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--purple), var(--cyan));
+}
+
+/* ── Status badge ────────────────────────────────────────────────────────── */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.status-badge.online  { background: rgba(16,185,129,0.15); color: var(--green); }
+.status-badge.offline { background: rgba(239,68,68,0.15);  color: var(--red); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px; border: none;
+  font-size: 13px; font-weight: 500;
+  transition: opacity 0.15s, transform 0.1s; cursor: pointer;
+}
+.btn:hover  { opacity: 0.85; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn-primary { background: linear-gradient(135deg, var(--purple), var(--purple2)); color: #fff; }
+.btn-cyan    { background: linear-gradient(135deg, var(--cyan), #0891b2); color: #fff; }
+.btn-ghost   { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+.btn-danger  { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.btn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+/* ── Form elements ───────────────────────────────────────────────────────── */
+.form-row   { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text2); }
+.form-input, .form-select {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px;
+  color: var(--text); font-size: 13px; outline: none;
+}
+.form-input:focus, .form-select:focus { border-color: var(--purple); }
+
+/* ── Invite link ─────────────────────────────────────────────────────────── */
+.invite-link-box {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; margin-top: 8px;
+}
+.invite-link-text {
+  flex: 1; font-size: 12px; color: var(--text2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Module cards grid ───────────────────────────────────────────────────── */
+.module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.module-card {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.module-header { display: flex; align-items: center; justify-content: space-between; }
+.module-icon-name { display: flex; align-items: center; gap: 8px; }
+.module-icon {
+  font-size: 18px; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(124,58,237,0.12); border-radius: 8px;
+}
+.module-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.module-desc { font-size: 11.5px; color: var(--text3); line-height: 1.4; }
+
+/* ── Toggle switch ───────────────────────────────────────────────────────── */
+label.toggle {
+  display: inline-flex; align-items: center;
+  cursor: pointer; position: relative;
+}
+label.toggle input[type=checkbox] {
+  position: absolute; opacity: 0; width: 0; height: 0;
+}
+.toggle-track {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--bg2); border: 1px solid var(--border);
+  position: relative; transition: background 0.25s; display: block;
+}
+label.toggle input:checked + .toggle-track {
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  border-color: transparent;
+}
+.toggle-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text3);
+  position: absolute; top: 2px; left: 2px;
+  transition: transform 0.25s, background 0.25s;
+}
+label.toggle input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(16px); background: #fff;
+}
+
+/* ── Setup page (centered card, no sidebar) ──────────────────────────────── */
+.setup-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 40px 20px;
+}
+.setup-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 40px;
+  width: 100%; max-width: 640px;
+}
+.setup-header { text-align: center; margin-bottom: 36px; }
+.setup-logo {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; margin: 0 auto 14px;
+}
+.setup-header h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.setup-header p  { color: var(--text2); font-size: 14px; }
+.setup-section   { margin-bottom: 28px; }
+.setup-section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 18px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.setup-section-icon  { font-size: 18px; }
+.setup-section-title { font-size: 15px; font-weight: 600; }
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.setup-field { display: flex; flex-direction: column; gap: 5px; }
+.setup-field.full { grid-column: 1 / -1; }
+.setup-field label { font-size: 12px; font-weight: 500; color: var(--text2); }
+.setup-field input, .setup-field select {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 12px;
+  color: var(--text); font-size: 13px; outline: none; width: 100%;
+}
+.setup-field input:focus, .setup-field select:focus { border-color: var(--purple); }
+.setup-submit {
+  width: 100%; padding: 12px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--purple), var(--purple2));
+  color: #fff; font-size: 15px; font-weight: 600;
+  border: none; cursor: pointer; margin-top: 8px;
+  transition: opacity 0.15s;
+}
+.setup-submit:hover { opacity: 0.9; }
+
+/* ── Selector page ───────────────────────────────────────────────────────── */
+.selector-page { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.selector-content { flex: 1; padding: 32px 24px; margin-left: 220px; }
+.selector-header { margin-bottom: 28px; }
+.selector-header h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.selector-header p  { color: var(--text2); }
+.guild-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; }
+.guild-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  text-align: center; transition: border-color 0.15s, transform 0.15s;
+}
+.guild-card:hover { border-color: var(--purple); transform: translateY(-2px); }
+.guild-icon {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: #fff; overflow: hidden;
+}
+.guild-icon img { width: 100%; height: 100%; object-fit: cover; }
+.guild-name    { font-size: 14px; font-weight: 600; color: var(--text); }
+.guild-members { font-size: 12px; color: var(--text3); }
+.guild-select-btn {
+  width: 100%; padding: 7px; border-radius: 7px;
+  background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3);
+  color: var(--purple2); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.guild-select-btn:hover { background: rgba(124,58,237,0.25); }
+
+/* ── Error page ──────────────────────────────────────────────────────────── */
+.error-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.error-card {
+  text-align: center; padding: 48px 40px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; max-width: 480px;
+}
+.error-code {
+  font-size: 72px; font-weight: 800; line-height: 1; margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.error-title   { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.error-message { color: var(--text2); margin-bottom: 24px; }
+
+/* ── Material Symbols icon sizing ────────────────────────────────────────── */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
   display: inline-block;
-  text-decoration: none;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga' 1;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  vertical-align: middle;
+  user-select: none;
+}
+.nav-icon .material-symbols-rounded  { font-size: 18px; }
+.mi-brand  { font-size: 22px; font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 20; }
+.mi-card   { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.mi-module { font-size: 22px; font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.mi-btn    { font-size: 16px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+.mi-setup  { font-size: 24px; font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.mi-topbar { font-size: 18px; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--bg); }
+::-webkit-scrollbar-thumb  { background: var(--bg3); border-radius: 3px; }
+
+/* ── Hamburger button (hidden on desktop) ────────────────────────────────── */
+.hamburger {
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+  cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.hamburger:hover { background: rgba(124,58,237,0.15); }
+.hamburger span {
+  display: block; width: 18px; height: 2px;
+  background: var(--text2); border-radius: 2px;
+  transition: transform 0.25s, opacity 0.25s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* ── Sidebar overlay (mobile backdrop) ───────────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── Sidebar: add slide transition ───────────────────────────────────────── */
+.sidebar { transition: transform 0.25s ease; }
+
+/* ── Responsive: tablet (≤ 1100px) ──────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
 }
 
-.button:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
-.button.primary { background: var(--primary); border-color: var(--primary-strong); }
-.button.success { background: var(--success); border-color: rgba(34, 197, 94, 0.4); }
-.button.danger { background: var(--danger); border-color: rgba(239, 68, 68, 0.4); }
-.button.ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.16); color: var(--text); }
-
-.form { display: grid; gap: 12px; }
-.dual { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-label { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
-input, select {
-  padding: 11px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-}
-
-.checkbox { align-items: center; grid-template-columns: auto 1fr; gap: 10px; }
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  text-transform: capitalize;
-}
-.status-chip .pulse {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
-  animation: pulse 2s infinite;
-}
-.status-chip.offline .pulse { background: var(--danger); box-shadow: 0 0 12px rgba(239, 68, 68, 0.6); }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
+/* ── Responsive: mobile (≤ 768px) ───────────────────────────────────────── */
 @media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 12px 16px;
-  }
-  .actions { width: 100%; flex-direction: column; }
-  .actions form { flex: 1; width: 100%; }
-  .actions .button { width: 100%; }
-  .hero { padding: 16px; }
+  .hamburger        { display: flex; }
+  .sidebar          { transform: translateX(-220px); }
+  .sidebar.open     { transform: translateX(0); }
+  .main-wrapper     { margin-left: 0; }
+  .selector-content { margin-left: 0; }
+  .setup-grid       { grid-template-columns: 1fr; }
+  .content          { padding: 16px; }
+  .topbar           { padding: 0 14px; gap: 8px; }
+  .topbar-site      { display: none; }
+  .topbar-sep       { display: none; }
+  .search-box       { display: none; }
+  .subgrid          { grid-template-columns: 1fr; }
+  .module-grid      { grid-template-columns: 1fr 1fr; }
+  .btn-actions      { flex-wrap: wrap; }
 }
 
+/* ── Responsive: small mobile (≤ 480px) ─────────────────────────────────── */
 @media (max-width: 480px) {
-  .brand h1 { font-size: 20px; }
-  .brand p { font-size: 13px; }
-  input, select { font-size: 13px; padding: 9px; }
+  .content          { padding: 12px; }
+  .card             { padding: 14px; }
+  .module-grid      { grid-template-columns: 1fr; }
+  .btn-actions      { flex-direction: column; }
+  .btn-actions .btn { width: 100%; justify-content: center; }
+  .uptime-val       { font-size: 22px; }
+  .invite-link-box  { flex-direction: column; align-items: flex-start; }
+  .invite-link-box .btn { width: 100%; justify-content: center; }
+  .setup-card       { padding: 24px 16px; }
+  .error-card       { padding: 32px 20px; }
+  .error-code       { font-size: 56px; }
 }
 "#;
 
 // ---------------------------------------------------------------------------
-// Shared layout helpers
+// Theme-toggle JS – raw string keeps JS braces away from format! escaping
 // ---------------------------------------------------------------------------
 
-fn html_head(title: &str) -> String {
+const THEME_SCRIPT: &str = r#"<script>
+(function() {
+  const t = localStorage.getItem('theme');
+  const h = document.documentElement;
+  if (t === 'light')       { h.className = 'light'; }
+  else if (t === 'system') { h.className = ''; }
+  else                     { h.className = 'dark'; }
+})();
+function toggleTheme() {
+  const h = document.documentElement;
+  const t = localStorage.getItem('theme') || 'dark';
+  if (t === 'dark') {
+    h.className = 'light';
+    localStorage.setItem('theme', 'light');
+  } else if (t === 'light') {
+    h.className = '';
+    localStorage.setItem('theme', 'system');
+  } else {
+    h.className = 'dark';
+    localStorage.setItem('theme', 'dark');
+  }
+}
+function toggleSidebar() {
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+  const hamburger = document.getElementById('hamburger-btn');
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.toggle('open');
+  if (overlay)   { overlay.classList.toggle('open', isOpen); }
+  if (hamburger) { hamburger.classList.toggle('open', isOpen); }
+}
+</script>"#;
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+fn html_head(title: &str, extra_script: &str) -> String {
     format!(
         r#"<!DOCTYPE html>
 <html lang="en" class="dark">
@@ -210,10 +582,68 @@ fn html_head(title: &str) -> String {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title} | Turbo Gravity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0..1,0&amp;display=block" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
+  {THEME_SCRIPT}
+  {extra_script}
 </head>
 <body>
-  <div class="backdrop"></div>
+"#
+    )
+}
+
+fn build_sidebar(active: &str) -> String {
+    let items: &[(&str, &str, &str)] = &[
+        ("home",          "Home",      "/dashboard"),
+        ("bar_chart",     "Analytics", "/dashboard"),
+        ("dns",           "Servers",   "/selector"),
+        ("extension",     "Modules",   "/dashboard"),
+        ("settings",      "Settings",  "/setup"),
+    ];
+    let nav: String = items
+        .iter()
+        .map(|(icon, name, href)| {
+            let cls = if *name == active { " active" } else { "" };
+            format!(
+                r#"    <a href="{href}" class="nav-item{cls}"><span class="nav-icon"><span class="material-symbols-rounded">{icon}</span></span>{name}</a>
+"#
+            )
+        })
+        .collect();
+    format!(
+        r#"<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-dot"><span class="material-symbols-rounded mi-brand">bolt</span></div>
+    <span class="sidebar-brand-name">Turbo Gravity</span>
+  </div>
+  <nav class="sidebar-nav">
+{nav}  </nav>
+</aside>
+"#
+    )
+}
+
+fn build_topbar(page_name: &str) -> String {
+    format!(
+        r#"<header class="topbar">
+  <div class="topbar-left">
+    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="topbar-site">Turbo Gravity</span>
+    <span class="topbar-sep"> | </span>
+    <span class="topbar-page">{page_name}</span>
+  </div>
+  <div class="topbar-right">
+    <input class="search-box" type="text" placeholder="Search&#x2026;" aria-label="Search" />
+    <button class="notif-btn" title="Notifications" aria-label="Notifications"><span class="material-symbols-rounded mi-topbar">notifications</span><span class="notif-dot"></span></button>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><span class="material-symbols-rounded mi-topbar">dark_mode</span></button>
+    <div class="avatar">TG</div>
+  </div>
+</header>
 "#
     )
 }
@@ -222,553 +652,570 @@ fn html_foot() -> &'static str {
     "</body>\n</html>\n"
 }
 
-fn topbar(back_href: Option<&str>) -> String {
-    let back_btn = match back_href {
-        Some(href) => format!(r#"<a class="button ghost" href="{href}">&larr; Back</a>"#),
-        None => String::new(),
-    };
-    format!(
-        r#"  <div class="topbar">
-    <div class="brand">
-      <div class="dot"></div>
-      <div>
-        <h1>Turbo Gravity</h1>
-        <p>Control Panel</p>
-      </div>
-    </div>
-    <div class="topbar-actions">
-      {back_btn}
-    </div>
-  </div>
-"#
-    )
-}
-
 // ---------------------------------------------------------------------------
-// Dashboard page (was dashboard.ejs)
+// Dashboard page
 // ---------------------------------------------------------------------------
 
 pub struct DashboardData {
-    pub bot_status: &'static str,
-    pub command_scope: String,
-    pub guild_id: String,
-    pub invite_link: String,
+    pub bot_status:        &'static str,
+    pub command_scope:     String,
+    pub guild_id:          String,
+    pub invite_link:       String,
     pub invite_permissions: String,
 }
 
 pub fn dashboard_page(data: &DashboardData) -> String {
-    let status_class = if data.bot_status == "online" { "" } else { "offline" };
-    let status_help = if data.bot_status == "online" {
-        "Bot is connected and ready"
-    } else {
-        "Bot is not connected"
-    };
+    let head          = html_head("Dashboard", "");
+    let sidebar       = build_sidebar("Home");
+    let topbar        = build_topbar("Dashboard");
+    let foot          = html_foot();
 
-    let scope_guild_sel = if data.command_scope == "guild" { " selected" } else { "" };
+    let status_class  = if data.bot_status == "online" { "online" } else { "offline" };
+    let status_dot    = r#"<span class="status-dot"></span>"#;
+    let status_text   = html_escape(data.bot_status);
+    let invite_link   = html_escape(&data.invite_link);
+    let invite_perms  = html_escape(&data.invite_permissions);
+    let guild_id      = html_escape(&data.guild_id);
+
+    let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
     let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
 
     format!(
-        r#"{head}{topbar}
-  <main class="page">
-    <!-- Status card -->
-    <div class="grid two">
+        r##"{head}
+<div class="layout">
+{sidebar}
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div class="main-wrapper">
+{topbar}
+<main class="content">
+  <div class="dashboard-grid">
+
+    <!-- ── Left column ──────────────────────────────────────────────── -->
+    <div class="col-left">
+
+      <!-- Server Analytics -->
       <div class="card">
         <div class="card-header">
-          <div>
-            <p class="eyebrow">Current Status</p>
-            <h3>Bot Health</h3>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">show_chart</span> Server Analytics</span>
+          <span class="card-badge">Last 30 days</span>
+        </div>
+        <div class="chart-wrap">
+          <svg viewBox="0 0 400 140" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="purpleArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="cyanArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="35"  x2="400" y2="35"  stroke="#1f2544" stroke-width="1"/>
+            <line x1="0" y1="70"  x2="400" y2="70"  stroke="#1f2544" stroke-width="1"/>
+            <line x1="0" y1="105" x2="400" y2="105" stroke="#1f2544" stroke-width="1"/>
+            <path d="M0,112 C50,108 100,98 150,88 C200,78 250,65 300,52 C350,40 380,33 400,30 L400,140 L0,140 Z"
+                  fill="url(#purpleArea)"/>
+            <path d="M0,125 C50,120 100,115 150,105 C200,92 250,74 300,52 C350,32 380,22 400,18 L400,140 L0,140 Z"
+                  fill="url(#cyanArea)"/>
+            <path d="M0,112 C50,108 100,98 150,88 C200,78 250,65 300,52 C350,40 380,33 400,30"
+                  fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M0,125 C50,120 100,115 150,105 C200,92 250,74 300,52 C350,32 380,22 400,18"
+                  fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item">
+            <span class="legend-dot" style="background:#7c3aed"></span>
+            Member growth
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background:#06b6d4"></span>
+            Message activity
           </div>
         </div>
-        <div style="margin-bottom:16px">
-          <span class="status-chip {status_class}">
-            <span class="pulse"></span>
-            {bot_status_upper}
-          </span>
-        </div>
-        <p style="color:var(--muted);font-size:13px">{status_help}</p>
       </div>
 
+      <!-- Bot Subgrid: Active Servers + Uptime -->
+      <div class="subgrid">
+        <div class="subcard">
+          <div class="subcard-title">Active Servers</div>
+          <div class="server-list">
+            <div class="server-row">
+              <span class="server-dot"></span>
+              Server <code style="font-size:11px;color:var(--text3)">{guild_id}</code>
+            </div>
+            <div class="server-row">
+              <span class="server-dot"></span>
+              Bot status:
+              <span class="status-badge {status_class}">{status_dot}{status_text}</span>
+            </div>
+          </div>
+        </div>
+        <div class="subcard">
+          <div class="subcard-title">Uptime</div>
+          <div class="uptime-val">99.9%</div>
+          <div class="uptime-label">Last 30 days</div>
+          <div class="uptime-bar-wrap">
+            <div class="uptime-bar" style="width:99.9%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
       <div class="card">
         <div class="card-header">
-          <div>
-            <p class="eyebrow">Quick Actions</p>
-            <h3>Bot Control</h3>
+          <span class="card-title"><span class="material-symbols-rounded mi-card">bolt</span> Quick Actions</span>
+        </div>
+        <div class="btn-actions">
+          <form method="POST" action="/control/restart" style="display:inline">
+            <button class="btn btn-primary" type="submit"><span class="material-symbols-rounded mi-btn">restart_alt</span> Restart Bot</button>
+          </form>
+          <form method="POST" action="/control/stop" style="display:inline">
+            <button class="btn btn-danger" type="submit"><span class="material-symbols-rounded mi-btn">stop_circle</span> Stop Bot</button>
+          </form>
+          <form method="POST" action="/control/clear-cache" style="display:inline">
+            <button class="btn btn-ghost" type="submit"><span class="material-symbols-rounded mi-btn">mop</span> Clear Cache</button>
+          </form>
+          <form method="POST" action="/control/reload-commands" style="display:inline">
+            <button class="btn btn-cyan" type="submit"><span class="material-symbols-rounded mi-btn">sync</span> Reload Commands</button>
+          </form>
+        </div>
+        <form method="POST" action="/dashboard/settings">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Command Scope</label>
+              <select class="form-select" name="commandScope">
+                <option value="guild"{scope_guild_sel}>Guild (recommended)</option>
+                <option value="global"{scope_global_sel}>Global</option>
+              </select>
+            </div>
+            <div class="form-group" style="align-self:flex-end">
+              <button class="btn btn-primary" type="submit">Save Settings</button>
+            </div>
           </div>
-        </div>
-        <div class="actions">
-          <a class="button success" href="/control/start">Start</a>
-          <a class="button danger" href="/control/stop">Stop</a>
-          <a class="button primary" href="/control/restart">Restart</a>
-        </div>
+        </form>
       </div>
-    </div>
 
-    <!-- Settings card -->
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <p class="eyebrow">Bot Settings</p>
-          <h3>Configuration</h3>
+      <!-- Invite Link -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">link</span> Invite Link</span>
+          <span class="card-badge">permissions: {invite_perms}</span>
+        </div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:8px">
+          Use this link to invite the bot to other servers.
+        </p>
+        <div class="invite-link-box">
+          <span class="invite-link-text">{invite_link}</span>
+          <a class="btn btn-primary" href="{invite_link}" target="_blank" rel="noopener noreferrer">
+            Open <span class="material-symbols-rounded mi-btn">open_in_new</span>
+          </a>
         </div>
       </div>
-      <form class="form" method="POST" action="/control/config">
-        <div class="dual">
-          <label>Command Scope
-            <select name="commandScope">
-              <option value="guild"{scope_guild_sel}>Guild (Fastest)</option>
-              <option value="global"{scope_global_sel}>Global</option>
-            </select>
-          </label>
-          <label>Guild ID
-            <input type="text" name="guildId" value="{guild_id}" placeholder="Optional" />
-          </label>
-        </div>
-        <label>Invite Permissions
-          <input type="text" name="invitePermissions" value="{invite_permissions}" />
-        </label>
-        <button class="button primary" type="submit">Save Settings</button>
-      </form>
-    </div>
 
-    <!-- Invite card -->
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <p class="eyebrow">Invite Link</p>
-          <h3>Add Bot to Server</h3>
+    </div><!-- /col-left -->
+
+    <!-- ── Right column ─────────────────────────────────────────────── -->
+    <div class="col-right">
+
+      <!-- Bot Modules -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">extension</span> Bot Modules</span>
+          <span class="card-badge">6 modules</span>
+        </div>
+        <div class="module-grid">
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">shield</span></div>
+                <span class="module-name">Moderation</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked aria-label="Toggle Moderation module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <p class="module-desc">Kick, ban, mute &amp; warn members to keep your server safe.</p>
+          </div>
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">payments</span></div>
+                <span class="module-name">Economy</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked aria-label="Toggle Economy module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <p class="module-desc">Virtual currency, shops, gambling &amp; leaderboards.</p>
+          </div>
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">celebration</span></div>
+                <span class="module-name">Fun</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked aria-label="Toggle Fun module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <p class="module-desc">Games, memes &amp; entertainment for your community.</p>
+          </div>
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">military_tech</span></div>
+                <span class="module-name">Leveling</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" aria-label="Toggle Leveling module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label> to reward your most active members.</p>
+          </div>
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">construction</span></div>
+                <span class="module-name">Utilities</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked aria-label="Toggle Utilities module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <p class="module-desc">Polls, reminders, server info &amp; other handy tools.</p>
+          </div>
+
+          <div class="module-card">
+            <div class="module-header">
+              <div class="module-icon-name">
+                <div class="module-icon"><span class="material-symbols-rounded mi-module">confirmation_number</span></div>
+                <span class="module-name">Tickets</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" aria-label="Toggle Tickets module" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <p class="module-desc">Support ticket system with categories &amp; transcripts.</p>
+          </div>
+
         </div>
       </div>
-      <p style="color:var(--muted);font-size:13px">Share this link to invite the bot to your servers:</p>
-      <div style="word-break:break-all;padding:12px;background:rgba(0,0,0,0.3);border-radius:6px;margin-top:12px;font-size:12px">
-        <a href="{invite_link}" target="_blank" style="color:var(--primary)">{invite_link}</a>
-      </div>
-      <a class="button primary" href="{invite_link}" target="_blank" style="margin-top:12px">Open Invite Link</a>
-    </div>
-  </main>
-{foot}"#,
-        head = html_head("Dashboard"),
-        topbar = topbar(None),
-        status_class = status_class,
-        bot_status_upper = data.bot_status.to_uppercase(),
-        status_help = status_help,
-        scope_guild_sel = scope_guild_sel,
-        scope_global_sel = scope_global_sel,
-        guild_id = html_escape(&data.guild_id),
-        invite_permissions = html_escape(&data.invite_permissions),
-        invite_link = html_escape(&data.invite_link),
-        foot = html_foot(),
+
+    </div><!-- /col-right -->
+  </div><!-- /dashboard-grid -->
+</main>
+</div><!-- /main-wrapper -->
+</div><!-- /layout -->
+{foot}"##
     )
 }
 
 // ---------------------------------------------------------------------------
-// Setup page (was setup.ejs)
+// Setup page  (centered card, no sidebar)
 // ---------------------------------------------------------------------------
 
 pub struct SetupData {
-    pub owner_id: String,
+    pub owner_id:       String,
+    pub client_id:      String,
+    pub client_secret:  String,
+    pub callback_url:   String,
+    pub mongo_uri:      String,
+    pub session_secret: String,
+    pub guild_id:       String,
+    pub port:           u16,
+    pub presence_type:  u8,
+    pub presence_text:  String,
+    pub command_scope:  String,
 }
 
 pub fn setup_page(data: &SetupData) -> String {
+    let head = html_head("Setup", "");
+    let foot = html_foot();
+
+    let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
+    let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
+    let p0 = if data.presence_type == 0 { " selected" } else { "" };
+    let p1 = if data.presence_type == 1 { " selected" } else { "" };
+    let p2 = if data.presence_type == 2 { " selected" } else { "" };
+    let p3 = if data.presence_type == 3 { " selected" } else { "" };
+    let p4 = if data.presence_type == 4 { " selected" } else { "" };
+
+    let callback_url = if data.callback_url.is_empty() {
+        if data.port == crate::config::DEFAULT_PORT {
+            crate::config::DEFAULT_CALLBACK_URL.to_string()
+        } else {
+            format!("http://localhost:{}/auth/discord/callback", data.port)
+        }
+    } else {
+        data.callback_url.clone()
+    };
+
+    let client_id      = html_escape(&data.client_id);
+    let client_secret  = html_escape(&data.client_secret);
+    let callback_url_e = html_escape(&callback_url);
+    let mongo_uri      = html_escape(&data.mongo_uri);
+    let session_secret = html_escape(&data.session_secret);
+    let owner_id       = html_escape(&data.owner_id);
+    let guild_id       = html_escape(&data.guild_id);
+    let port           = data.port;
+    let presence_text  = html_escape(&data.presence_text);
+
     format!(
         r#"{head}
-  <style>
-    .setup-page {{
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 24px;
-    }}
-    .setup-card {{
-      width: 100%;
-      max-width: 720px;
-      background: var(--panel);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px;
-      padding: 32px;
-      box-shadow: var(--shadow);
-    }}
-    .setup-card .brand {{ margin-bottom: 24px; }}
-    .setup-form {{ gap: 24px; }}
-    .form-section {{
-      display: grid;
-      gap: 12px;
-      padding: 16px;
-      background: var(--panel-strong);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-    }}
-    .form-section h3 {{ margin: 0 0 8px; font-size: 16px; }}
-  </style>
-  <main class="page setup-page">
-    <section class="setup-card">
-      <div class="brand">
-        <div class="dot"></div>
-        <div>
-          <h1>Turbo Gravity Setup</h1>
-          <p>Configure your Discord bot to get started</p>
+<div class="setup-page">
+  <div class="setup-card">
+
+    <div class="setup-header">
+      <div class="setup-logo"><span class="material-symbols-rounded mi-setup">bolt</span></div>
+      <h1>Turbo Gravity Setup</h1>
+      <p>Configure your Discord bot &#x2014; no coding required.</p>
+    </div>
+
+    <form method="POST" action="/setup">
+
+      <!-- ── Section 1: Discord Credentials ──────────────────────── -->
+      <div class="setup-section">
+        <div class="setup-section-header">
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">smart_toy</span></span>
+          <span class="setup-section-title">Discord Credentials</span>
+        </div>
+        <div class="setup-grid">
+          <div class="setup-field">
+            <label>Client ID (Application ID)</label>
+            <input type="text" name="clientId" value="{client_id}" placeholder="e.g. 1234567890" required />
+          </div>
+          <div class="setup-field">
+            <label>Client Secret</label>
+            <input type="password" name="clientSecret" value="{client_secret}" placeholder="OAuth2 client secret" autocomplete="new-password" />
+          </div>
+          <div class="setup-field full">
+            <label>OAuth2 Callback URL</label>
+            <input type="url" name="callbackUrl" value="{callback_url_e}" required />
+          </div>
         </div>
       </div>
 
-      <form class="form setup-form" method="POST" action="/setup">
-        <div class="form-section">
-          <h3>Discord Bot Credentials</h3>
-          <label>Bot Token
-            <input type="password" name="botToken" placeholder="Your Discord bot token" required />
-          </label>
-          <div class="dual">
-            <label>Client ID
-              <input type="text" name="clientId" placeholder="Application client ID" required />
-            </label>
-            <label>Client Secret
-              <input type="password" name="clientSecret" placeholder="OAuth2 client secret" required />
-            </label>
-          </div>
-          <label>OAuth Callback URL
-            <input type="url" name="callbackUrl" value="http://localhost:8080/auth/discord/callback" required />
-          </label>
+      <!-- ── Section 2: Database &amp; Security ─────────────────── -->
+      <div class="setup-section">
+        <div class="setup-section-header">
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">storage</span></span>
+          <span class="setup-section-title">Database &amp; Security</span>
         </div>
-
-        <div class="form-section">
-          <h3>Database &amp; Security (MongoDB Optional)</h3>
-          <label>MongoDB URI (optional)
-            <input type="text" name="mongoUri" placeholder="mongodb://localhost:27017/turbogravity" />
-          </label>
-          <label>Session Secret
-            <input type="password" name="sessionSecret" placeholder="Random secure string" required />
-          </label>
-          <label>Admin User IDs (comma-separated)
-            <input type="text" name="adminIds" placeholder="123456789,987654321" value="{owner_id}" required />
-          </label>
-        </div>
-
-        <div class="form-section">
-          <h3>Bot Settings</h3>
-          <div class="dual">
-            <label>Guild ID (optional)
-              <input type="text" name="guildId" placeholder="For guild-only commands" />
-            </label>
-            <label>Port
-              <input type="number" name="port" value="8080" required />
-            </label>
+        <div class="setup-grid">
+          <div class="setup-field full">
+            <label>MongoDB URI</label>
+            <input type="text" name="mongoUri" value="{mongo_uri}" placeholder="mongodb://localhost:27017/turbogravity" />
           </div>
-          <div class="dual">
-            <label>Presence Type
-              <select name="presenceType">
-                <option value="0">Playing</option>
-                <option value="2">Listening</option>
-                <option value="3">Watching</option>
-                <option value="5">Competing</option>
-              </select>
-            </label>
-            <label>Command Scope
-              <select name="commandScope">
-                <option value="guild">Guild</option>
-                <option value="global">Global</option>
-              </select>
-            </label>
+          <div class="setup-field full">
+            <label>Session Secret</label>
+            <input type="password" name="sessionSecret" value="{session_secret}" placeholder="Random secure string" autocomplete="new-password" />
           </div>
-          <label>Presence Text
-            <input type="text" name="presenceText" value="Ready to serve" />
-          </label>
-          <label>Invite Permissions
-            <input type="text" name="invitePermissions" value="8" />
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" name="autoStart" />
-            <span>Auto-start bot on launch</span>
-          </label>
+          <div class="setup-field full">
+            <label>Admin User IDs (comma-separated Discord user IDs)</label>
+            <input type="text" name="adminIds" value="{owner_id}" placeholder="123456789,987654321" />
+          </div>
         </div>
+      </div>
 
-        <button class="button primary" type="submit">Save &amp; Start</button>
-      </form>
-    </section>
-  </main>
-{foot}"#,
-        head = html_head("Setup"),
-        owner_id = html_escape(&data.owner_id),
-        foot = html_foot(),
+      <!-- ── Section 3: Bot Settings ─────────────────────────────── -->
+      <div class="setup-section">
+        <div class="setup-section-header">
+          <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">settings</span></span>
+          <span class="setup-section-title">Bot Settings</span>
+        </div>
+        <div class="setup-grid">
+          <div class="setup-field">
+            <label>Guild ID (leave blank for global commands)</label>
+            <input type="text" name="guildId" value="{guild_id}" placeholder="Your server&#x27;s ID" />
+          </div>
+          <div class="setup-field">
+            <label>Dashboard Port</label>
+            <input type="number" name="port" value="{port}" min="1" max="65535" required />
+          </div>
+          <div class="setup-field">
+            <label>Presence Type</label>
+            <select name="presenceType">
+              <option value="0"{p0}>Playing</option>
+              <option value="1"{p1}>Streaming</option>
+              <option value="2"{p2}>Listening</option>
+              <option value="3"{p3}>Watching</option>
+              <option value="4"{p4}>Competing</option>
+            </select>
+          </div>
+          <div class="setup-field">
+            <label>Command Scope</label>
+            <select name="commandScope">
+              <option value="guild"{scope_guild_sel}>Guild (recommended)</option>
+              <option value="global"{scope_global_sel}>Global</option>
+            </select>
+          </div>
+          <div class="setup-field full">
+            <label>Presence Text</label>
+            <input type="text" name="presenceText" value="{presence_text}" placeholder="Ready to serve" />
+          </div>
+        </div>
+      </div>
+
+      <button class="setup-submit" type="submit"><span class="material-symbols-rounded mi-btn">save</span> Save &amp; Start</button>
+    </form>
+
+  </div>
+</div>
+{foot}"#
     )
 }
 
 // ---------------------------------------------------------------------------
-// Guild selector page (was selector.ejs)
+// Guild selector page
 // ---------------------------------------------------------------------------
 
 pub struct GuildInfo {
-    pub id: String,
-    pub name: String,
-    pub icon: Option<String>,
+    pub id:           String,
+    pub name:         String,
+    pub icon:         Option<String>,
     pub member_count: Option<u64>,
 }
 
 pub struct SelectorData {
-    pub username: String,
-    pub guilds: Vec<GuildInfo>,
+    pub username:   String,
+    pub guilds:     Vec<GuildInfo>,
     pub bot_status: &'static str,
 }
 
 pub fn selector_page(data: &SelectorData) -> String {
-    let status_class = if data.bot_status == "online" {
-        "status-online"
-    } else {
-        "status-offline"
-    };
+    let head    = html_head("Select Server", "");
+    let sidebar = build_sidebar("Servers");
+    let topbar  = build_topbar("Select Server");
+    let foot    = html_foot();
+
+    let status_class = if data.bot_status == "online" { "online" } else { "offline" };
+    let username     = html_escape(&data.username);
 
     let guild_cards: String = data
         .guilds
         .iter()
         .map(|g| {
+            let name  = html_escape(&g.name);
+            let gid   = html_escape(&g.id);
             let icon_html = match &g.icon {
-                Some(icon) => format!(
-                    r#"<img src="https://cdn.discordapp.com/icons/{id}/{icon}.png?size=256" alt="{name}" class="guild-icon">"#,
-                    id = html_escape(&g.id),
-                    icon = html_escape(icon),
-                    name = html_escape(&g.name),
+                Some(hash) => format!(
+                    r#"<img src="https://cdn.discordapp.com/icons/{gid}/{hash}.webp?size=128" alt="{name}" />"#,
+                    hash = html_escape(hash)
                 ),
                 None => {
-                    let initials: String = g
-                        .name
-                        .split_whitespace()
-                        .filter_map(|w| w.chars().next())
-                        .map(|c| c.to_uppercase().to_string())
-                        .take(2)
-                        .collect();
-                    format!(r#"<div class="guild-placeholder">{initials}</div>"#)
+                    let initial: String = g.name.chars().next().unwrap_or('?').to_uppercase().collect();
+                    format!(r#"<span style="font-size:24px;font-weight:700">{initial}</span>"#)
                 }
             };
-            let members = g
-                .member_count
-                .map(|n| n.to_string())
-                .unwrap_or_else(|| "?".into());
+            let members_html = match g.member_count {
+                Some(n) => format!(r#"<span class="guild-members">{n} members</span>"#),
+                None    => String::new(),
+            };
             format!(
-                r#"<div class="guild-card">
-          <div class="guild-icon-wrapper">{icon_html}</div>
-          <div class="guild-info">
-            <div class="guild-name">{name}</div>
-            <div class="guild-stats"><div class="stat">👥 {members} Members</div></div>
-            <div class="guild-action">
-              <a href="/manage/{id}" class="btn btn-manage">Manage</a>
-            </div>
-          </div>
-        </div>"#,
-                icon_html = icon_html,
-                name = html_escape(&g.name),
-                members = members,
-                id = html_escape(&g.id),
+                r#"<a class="guild-card" href="/dashboard?guild={gid}" aria-label="Select server {name}">
+  <div class="guild-icon">{icon_html}</div>
+  <span class="guild-name">{name}</span>
+  {members_html}
+  <span class="guild-select-btn" aria-hidden="true">Select Server</span>
+</a>
+"#
             )
         })
         .collect();
 
-    let content = if data.guilds.is_empty() {
-        r#"<div class="empty-state">
-          <div class="empty-state-icon">🔍</div>
-          <h2>No Servers Found</h2>
-          <p>You don't have permission to manage any servers yet.</p>
-        </div>"#
-            .to_string()
+    let empty_msg = if data.guilds.is_empty() {
+        r#"<p style="color:var(--text2);text-align:center;padding:40px 0">
+  No servers found where you have Administrator permissions.
+</p>"#
     } else {
-        format!(r#"<div class="guilds-grid">{guild_cards}</div>"#)
+        ""
     };
 
     format!(
         r#"{head}
-  <style>
-    body {{
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
-      padding: 20px;
-    }}
-    .navbar {{
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 20px 40px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 12px;
-      margin-bottom: 40px;
-      backdrop-filter: blur(10px);
-    }}
-    .navbar-brand {{ color: white; font-size: 24px; font-weight: bold; text-decoration: none; }}
-    .navbar-right {{ display: flex; align-items: center; gap: 20px; }}
-    .user-name {{ color: white; font-weight: 500; }}
-    .logout-btn {{
-      padding: 10px 20px;
-      background: rgba(255,59,48,0.8);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: all 0.3s ease;
-      text-decoration: none;
-      display: inline-block;
-    }}
-    .logout-btn:hover {{ background: rgba(255,59,48,1); transform: translateY(-2px); }}
-    .container {{ max-width: 1200px; margin: 0 auto; flex: 1; }}
-    .header {{ text-align: center; color: white; margin-bottom: 40px; }}
-    .header h1 {{ font-size: 36px; margin-bottom: 10px; }}
-    .header p {{ font-size: 16px; opacity: 0.9; }}
-    .guilds-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 20px;
-      margin-bottom: 20px;
-    }}
-    .guild-card {{
-      background: rgba(255,255,255,0.95);
-      border-radius: 12px;
-      overflow: hidden;
-      transition: all 0.3s ease;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }}
-    .guild-card:hover {{ transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); }}
-    .guild-icon-wrapper {{
-      position: relative;
-      width: 100%;
-      padding-top: 100%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      overflow: hidden;
-    }}
-    .guild-icon {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }}
-    .guild-placeholder {{
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 32px;
-      color: white;
-      font-weight: bold;
-    }}
-    .guild-info {{ padding: 20px; }}
-    .guild-name {{ font-size: 18px; font-weight: 600; color: #333; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-    .guild-stats {{ display: flex; gap: 15px; font-size: 14px; color: #666; margin-bottom: 15px; }}
-    .guild-action {{ display: flex; gap: 10px; }}
-    .btn {{ flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center; transition: all 0.3s ease; font-size: 14px; }}
-    .btn-manage {{ background: #667eea; color: white; }}
-    .btn-manage:hover {{ background: #5568d3; }}
-    .empty-state {{ text-align: center; padding: 60px 20px; color: white; }}
-    .empty-state-icon {{ font-size: 64px; margin-bottom: 20px; }}
-    .empty-state h2 {{ font-size: 28px; margin-bottom: 10px; }}
-    .empty-state p {{ font-size: 16px; opacity: 0.9; margin-bottom: 30px; }}
-    .status-badge {{
-      display: inline-block;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 15px;
-    }}
-    .status-online {{ background: rgba(34,197,94,0.2); color: #22c55e; }}
-    .status-offline {{ background: rgba(107,114,128,0.2); color: #6b7280; }}
-  </style>
-  <div class="navbar">
-    <div class="navbar-brand">&#128640; Turbo Gravity</div>
-    <div class="navbar-right">
-      <span class="user-name">{username}</span>
-      <a href="/logout" class="logout-btn">Logout</a>
-    </div>
+<div class="layout">
+{sidebar}
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div class="main-wrapper">
+{topbar}
+<div class="selector-content">
+  <div class="selector-header">
+    <h1>Select a Server</h1>
+    <p>Welcome back, <strong>{username}</strong>. Bot is
+      <span class="status-badge {status_class}">
+        <span class="status-dot"></span>{bot_status}
+      </span>
+    </p>
   </div>
-
-  <div class="container">
-    <div class="header">
-      <h1>Select a Guild</h1>
-      <p>Choose a server to manage</p>
-      <div class="status-badge {status_class}">
-        Bot Status: {bot_status_upper}
-      </div>
-    </div>
-    {content}
+  <div class="guild-grid">
+    {guild_cards}
   </div>
+  {empty_msg}
+</div>
+</div>
+</div>
 {foot}"#,
-        head = html_head("Guild Selector"),
-        username = html_escape(&data.username),
-        status_class = status_class,
-        bot_status_upper = data.bot_status.to_uppercase(),
-        content = content,
-        foot = html_foot(),
+        bot_status = html_escape(data.bot_status),
     )
 }
 
 // ---------------------------------------------------------------------------
-// Error page (was error.ejs)
+// Error page
 // ---------------------------------------------------------------------------
 
 pub struct ErrorData {
-    pub code: u16,
-    pub title: String,
+    pub code:    u16,
+    pub title:   String,
     pub message: String,
 }
 
 pub fn error_page(data: &ErrorData) -> String {
+    let head  = html_head("Error", "");
+    let foot  = html_foot();
+    let code  = data.code;
+    let title = html_escape(&data.title);
+    let msg   = html_escape(&data.message);
+
     format!(
-        r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{code} - Turbo Gravity</title>
-  <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }}
-    .error-container {{
-      text-align: center;
-      background: rgba(255,255,255,0.95);
-      border-radius: 12px;
-      padding: 60px 40px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 500px;
-      width: 100%;
-    }}
-    .error-code {{ font-size: 72px; font-weight: 700; color: #667eea; margin-bottom: 20px; }}
-    .error-title {{ font-size: 24px; color: #333; margin-bottom: 10px; font-weight: 600; }}
-    .error-message {{ font-size: 16px; color: #666; margin-bottom: 30px; line-height: 1.6; }}
-    .error-actions {{ display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }}
-    .btn {{ padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.3s ease; font-size: 14px; }}
-    .btn-primary {{ background: #667eea; color: white; }}
-    .btn-primary:hover {{ background: #5568d3; transform: translateY(-2px); }}
-    .btn-secondary {{ background: #f3f4f6; color: #333; }}
-    .btn-secondary:hover {{ background: #e5e7eb; transform: translateY(-2px); }}
-  </style>
-</head>
-<body>
-  <div class="error-container">
+        r#"{head}
+<div class="error-page">
+  <div class="error-card">
     <div class="error-code">{code}</div>
     <div class="error-title">{title}</div>
-    <div class="error-message">{message}</div>
-    <div class="error-actions">
-      <a href="/selector" class="btn btn-primary">Back to Servers</a>
-      <a href="/" class="btn btn-secondary">Home</a>
-    </div>
+    <div class="error-message">{msg}</div>
+    <a class="btn btn-primary" href="/dashboard"><span class="material-symbols-rounded mi-btn">arrow_back</span> Back to Dashboard</a>
   </div>
-</body>
-</html>
-"#,
-        code = data.code,
-        title = html_escape(&data.title),
-        message = html_escape(&data.message),
+</div>
+{foot}"#
     )
 }
 
 // ---------------------------------------------------------------------------
-// Utility: minimal HTML escaping to prevent XSS in dynamic values
+// HTML escape helper
 // ---------------------------------------------------------------------------
 
 pub fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&'  => out.push_str("&amp;"),
+            '<'  => out.push_str("&lt;"),
+            '>'  => out.push_str("&gt;"),
+            '"'  => out.push_str("&quot;"),
+            '\'' => out.push_str("&#x27;"),
+            _    => out.push(ch),
+        }
+    }
+    out
 }

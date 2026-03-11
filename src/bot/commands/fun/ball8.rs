@@ -1,5 +1,5 @@
 use crate::bot::{Context, Error};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 
 const RESPONSES: &[&str] = &[
     "It is certain.",
@@ -31,7 +31,7 @@ pub async fn ball8(
     #[description = "Your question"] question: String,
 ) -> Result<(), Error> {
     let answer = RESPONSES
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rand::rng())
         .copied()
         .unwrap_or("Maybe.");
     ctx.say(format!("🎱 **{}**\n{}", question, answer)).await?;

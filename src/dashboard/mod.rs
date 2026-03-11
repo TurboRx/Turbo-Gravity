@@ -19,7 +19,18 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::router())
-        .layer(CorsLayer::permissive())
+        // Restrict CORS to localhost only for security
+        .layer(
+            CorsLayer::new()
+                .allow_origin([
+                    "http://localhost:8080".parse().unwrap(),
+                    format!("http://localhost:{port}").parse().unwrap(),
+                    "http://127.0.0.1:8080".parse().unwrap(),
+                    format!("http://127.0.0.1:{port}").parse().unwrap(),
+                ])
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_headers([axum::http::header::CONTENT_TYPE]),
+        )
         .layer(TraceLayer::new_for_http())
         // Inject Arc<AppState> into all route handlers
         .with_state(Arc::clone(&state));

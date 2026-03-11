@@ -21,7 +21,7 @@ Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity
 - 🔨 **Moderation** — Ban, kick, timeout, warn, warnings log, purge, slowmode, lock/unlock, unban
 - 🎫 **Ticket System** — Create, close, add/remove members from support tickets
 - 🛠️ **Utility** — Ping, uptime, stats, help, user/server/channel/role info, avatar, embed builder, connection time
-- 📊 **Optional Dashboard** — Axum HTTP API for liveness checks, runtime stats, and public config
+- 📊 **Optional Dashboard** — Modern web control panel with sidebar navigation, server analytics, bot module toggles, and a browser-based setup wizard
 - 🗄️ **MongoDB Integration** — Persistent economy profiles and warning records (optional — bot runs fine without a DB)
 - 📡 **Structured Logging** — `tracing` + `tracing-subscriber` with `RUST_LOG` env-var control
 - 🛑 **Graceful Shutdown** — Handles SIGINT/SIGTERM for clean process exit
@@ -45,9 +45,13 @@ Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity
    ```
 
 2. **Configure the bot**
+
+   **Option A — Setup Wizard (recommended for non-programmers)**
+   Start the bot once, then open `http://localhost:8080/setup` in your browser to configure everything through a guided form.
+
+   **Option B — Edit config directly**
    ```bash
-   # Edit config.toml — at minimum set bot.token
-   nano config.toml
+   nano config.toml   # at minimum set bot.token
    ```
 
 3. **Build and run**
@@ -110,13 +114,43 @@ main.rs
 | Async runtime | `tokio` with `full` features |
 | Graceful shutdown | `tokio::signal` handles SIGINT + SIGTERM |
 
-### Dashboard API Endpoints
+### Dashboard
+
+The optional web dashboard runs at `http://localhost:8080` (or the configured port).
+
+#### Screenshots
+
+**Dashboard — Dark mode** (default)
+![Dashboard dark mode](docs/screenshots/dashboard-dark.png)
+
+**Dashboard — Light mode**
+![Dashboard light mode](docs/screenshots/dashboard-light.png)
+
+**Mobile view** (390px — hamburger sidebar, responsive layout)
+
+| Dark | Light |
+|------|-------|
+| ![Mobile dark](docs/screenshots/dashboard-mobile.png) | ![Mobile light](docs/screenshots/dashboard-mobile-light.png) |
+
+**Setup wizard** (`/setup` — browser-based config, no file editing required)
+![Setup wizard](docs/screenshots/setup.png)
+
+#### Dashboard Routes
 
 | Route | Description |
 |---|---|
+| `GET /dashboard` | Main control panel — analytics, bot modules, quick actions |
+| `GET /setup` | Browser-based setup wizard (pre-fills current config) |
+| `POST /setup` | Saves wizard form to `config.toml` and redirects to `/dashboard` |
+| `GET /selector` | Guild selector — lists all servers the bot is in |
 | `GET /health` | Liveness probe — returns `{"status":"ok","version":"..."}` |
 | `GET /api/stats` | Runtime stats (DB connected, bot configured, port) |
 | `GET /api/config` | Public (non-secret) config values |
+| `GET /styles.css` | Embedded stylesheet (dark/light/system theme support) |
+
+#### Theme Support
+
+The dashboard supports **dark mode**, **light mode**, and **device-default** (respects `prefers-color-scheme`). Use the ☀️ button in the top-right to toggle — your preference is saved to `localStorage`.
 
 ---
 
