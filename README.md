@@ -118,7 +118,7 @@ main.rs
 
 The optional web dashboard runs at `http://localhost:8080` (or the configured port).
 
-#### Screenshots DEMO
+#### Screenshots (DEMO)
 
 **Dashboard — Dark mode** (default)
 ![Dashboard dark mode](docs/screenshots/dashboard-dark.png)
