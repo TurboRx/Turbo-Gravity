@@ -1,3 +1,4 @@
+pub mod pages;
 pub mod routes;
 
 use std::sync::Arc;
