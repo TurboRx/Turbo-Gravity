@@ -120,10 +120,13 @@ The optional web dashboard runs at `http://localhost:8080` (or the configured po
 
 #### Screenshots (DEMO)
 
-**Dashboard — Dark mode** (default)
+**Dashboard — Dark mode** (default) — 4K Ultra HD (3840×2160)
+![Dashboard dark mode 4K](docs/screenshots/dashboard-dark-4k.png)
+
+**Dashboard — Dark mode** (1400×900)
 ![Dashboard dark mode](docs/screenshots/dashboard-dark.png)
 
-**Dashboard — Light mode**
+**Dashboard — Light mode** (1400×900)
 ![Dashboard light mode](docs/screenshots/dashboard-light.png)
 
 **Mobile view** (390px — hamburger sidebar, responsive layout)
