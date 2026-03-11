@@ -32,7 +32,7 @@ Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity
 
 ### Prerequisites
 
-- [Rust (stable)](https://rustup.rs) — install via rustup
+- [Rust](https://rustup.rs) — install via rustup
 - A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
 - [MongoDB](https://www.mongodb.com/) (optional — bot runs without a database)
 
@@ -188,7 +188,7 @@ cargo build --release
 
 ## 📄 License
 
-[MIT](LICENSE)
+This project is licensed under [MIT](LICENSE).
 
 ---
 
