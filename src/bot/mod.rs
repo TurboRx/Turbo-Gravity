@@ -55,11 +55,13 @@ pub async fn start(state: SharedState) -> anyhow::Result<()> {
 
                     // Register commands guild-scoped or globally based on config
                     if cfg.command_scope == "guild" && !cfg.guild_id.is_empty() {
-                        let guild_id = serenity::GuildId::new(
-                            cfg.guild_id
-                                .parse::<u64>()
-                                .expect("config.bot.guild_id must be a valid u64"),
-                        );
+                        let guild_id_num = cfg.guild_id
+                            .parse::<u64>()
+                            .map_err(|e| anyhow::anyhow!(
+                                "config.bot.guild_id '{}' must be a valid u64: {}",
+                                cfg.guild_id, e
+                            ))?;
+                        let guild_id = serenity::GuildId::new(guild_id_num);
                         poise::builtins::register_in_guild(
                             ctx,
                             &framework.options().commands,

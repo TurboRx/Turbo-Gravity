@@ -48,7 +48,7 @@ impl User {
         Ok(col.find_one(doc! { "discord_id": discord_id }).await?)
     }
 
-    /// Find the user or create a minimal document for them.
+    /// Find the user or create a minimal document for them using MongoDB's atomic upsert.
     pub async fn upsert(
         db: &Database,
         discord_id: &str,
@@ -56,25 +56,33 @@ impl User {
         discriminator: &str,
         avatar: Option<&str>,
     ) -> anyhow::Result<User> {
+        use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+
         let col = Self::collection(db);
         let filter = doc! { "discord_id": discord_id };
-        if let Some(existing) = col.find_one(filter.clone()).await? {
-            return Ok(existing);
-        }
-        let user = User {
-            id: None,
-            discord_id: discord_id.to_string(),
-            username: username.to_string(),
-            discriminator: discriminator.to_string(),
-            avatar: avatar.map(str::to_string),
-            balance: 0,
-            xp: 0,
-            level: 1,
-            last_daily: None,
-            last_work: None,
+
+        // Use $setOnInsert to set fields only on document creation
+        let update = doc! {
+            "$setOnInsert": {
+                "discord_id": discord_id,
+                "username": username,
+                "discriminator": discriminator,
+                "avatar": avatar,
+                "balance": 0_i64,
+                "xp": 0_i64,
+                "level": 1_i64,
+                "last_daily": null,
+                "last_work": null,
+            },
         };
-        col.insert_one(&user).await?;
-        Ok(col.find_one(filter).await?.expect("just inserted"))
+
+        let options = FindOneAndUpdateOptions::builder()
+            .upsert(true)
+            .return_document(ReturnDocument::After)
+            .build();
+
+        let result = col.find_one_and_update(filter, update).with_options(options).await?;
+        result.ok_or_else(|| anyhow::anyhow!("find_one_and_update with upsert returned None"))
     }
 
     pub async fn save(&self, db: &Database) -> anyhow::Result<()> {

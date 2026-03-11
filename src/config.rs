@@ -92,17 +92,93 @@ fn default_callback_url() -> String {
     DEFAULT_CALLBACK_URL.into()
 }
 
+/// Validate configuration values.
+pub fn validate(cfg: &Config) -> anyhow::Result<()> {
+    // Validate bot token is not empty
+    anyhow::ensure!(
+        !cfg.bot.token.trim().is_empty(),
+        "config.bot.token must not be empty"
+    );
+
+    // Validate client_id is not empty and is a valid u64
+    anyhow::ensure!(
+        !cfg.bot.client_id.trim().is_empty(),
+        "config.bot.client_id must not be empty"
+    );
+    cfg.bot.client_id.parse::<u64>().with_context(|| {
+        format!(
+            "config.bot.client_id '{}' must be a valid Discord snowflake (numeric)",
+            cfg.bot.client_id
+        )
+    })?;
+
+    // Validate guild_id if provided
+    if !cfg.bot.guild_id.is_empty() {
+        cfg.bot.guild_id.parse::<u64>().with_context(|| {
+            format!(
+                "config.bot.guild_id '{}' must be a valid Discord snowflake (numeric)",
+                cfg.bot.guild_id
+            )
+        })?;
+    }
+
+    // Validate presence_type is in range 0-4
+    anyhow::ensure!(
+        cfg.bot.presence_type <= 4,
+        "config.bot.presence_type must be 0-4 (Playing, Streaming, Listening, Watching, Competing), got {}",
+        cfg.bot.presence_type
+    );
+
+    // Validate command_scope is either "guild" or "global"
+    anyhow::ensure!(
+        cfg.bot.command_scope == "guild" || cfg.bot.command_scope == "global",
+        "config.bot.command_scope must be 'guild' or 'global', got '{}'",
+        cfg.bot.command_scope
+    );
+
+    // Validate dashboard port is not zero
+    anyhow::ensure!(
+        cfg.dashboard.port > 0,
+        "config.dashboard.port must be greater than 0, got {}",
+        cfg.dashboard.port
+    );
+
+    // Validate MongoDB URI format if provided
+    if !cfg.database.mongo_uri.is_empty() {
+        anyhow::ensure!(
+            cfg.database.mongo_uri.starts_with("mongodb://") || cfg.database.mongo_uri.starts_with("mongodb+srv://"),
+            "config.database.mongo_uri must start with 'mongodb://' or 'mongodb+srv://', got '{}'",
+            cfg.database.mongo_uri
+        );
+    }
+
+    // Validate admin_ids are all valid u64s
+    for admin_id in &cfg.dashboard.admin_ids {
+        admin_id.parse::<u64>().with_context(|| {
+            format!(
+                "config.dashboard.admin_ids entry '{}' must be a valid Discord snowflake (numeric)",
+                admin_id
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
 /// Load `config.toml` from the current working directory.
 pub fn load() -> anyhow::Result<Config> {
     let path = Path::new("config.toml");
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read config file at '{}'", path.display()))?;
     let cfg: Config = toml::from_str(&raw).context("Failed to parse config.toml")?;
+    validate(&cfg)?;
     Ok(cfg)
 }
 
 /// Serialize `Config` back to `config.toml` in the current working directory.
+/// Validates the configuration before saving.
 pub fn save(cfg: &Config) -> anyhow::Result<()> {
+    validate(cfg)?;
     let raw = toml::to_string_pretty(cfg).context("Failed to serialize config")?;
     std::fs::write("config.toml", raw).context("Failed to write config.toml")?;
     Ok(())

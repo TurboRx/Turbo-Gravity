@@ -202,9 +202,33 @@ fn default_port_str() -> String {
 async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
     use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
 
-    let port: u16 = form.port.parse().unwrap_or(8080);
-    let presence_type: u8 = form.presence_type.parse().unwrap_or(0);
+    // Validate port
+    let port: u16 = match form.port.parse() {
+        Ok(p) if p > 0 => p,
+        _ => {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Port".to_string(),
+                message: format!("Port must be a positive number, got '{}'", form.port),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    };
 
+    // Validate presence_type
+    let presence_type: u8 = match form.presence_type.parse() {
+        Ok(pt) if pt <= 4 => pt,
+        _ => {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Presence Type".to_string(),
+                message: format!("Presence type must be 0-4, got '{}'", form.presence_type),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    };
+
+    // Validate and parse admin_ids
     let admin_ids: Vec<String> = form
         .admin_ids
         .split(',')
@@ -212,6 +236,50 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect();
+
+    // Validate each admin_id is a valid u64 (Discord snowflake)
+    for admin_id in &admin_ids {
+        if admin_id.parse::<u64>().is_err() {
+            let data = ErrorData {
+                code: 400,
+                title: "Invalid Admin ID".to_string(),
+                message: format!("Admin ID '{}' must be a valid Discord snowflake (numeric)", admin_id),
+            };
+            return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+        }
+    }
+
+    // Validate client_id if provided
+    if !form.client_id.trim().is_empty() && form.client_id.parse::<u64>().is_err() {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Client ID".to_string(),
+            message: format!("Client ID must be a valid Discord snowflake (numeric), got '{}'", form.client_id),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
+
+    // Validate guild_id if provided
+    if !form.guild_id.trim().is_empty() && form.guild_id.parse::<u64>().is_err() {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Guild ID".to_string(),
+            message: format!("Guild ID must be a valid Discord snowflake (numeric), got '{}'", form.guild_id),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
+
+    // Validate MongoDB URI if provided
+    if !form.mongo_uri.trim().is_empty()
+        && !form.mongo_uri.starts_with("mongodb://")
+        && !form.mongo_uri.starts_with("mongodb+srv://") {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid MongoDB URI".to_string(),
+            message: "MongoDB URI must start with 'mongodb://' or 'mongodb+srv://'".to_string(),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
+    }
 
     let callback_url = if form.callback_url.is_empty() {
         format!("http://localhost:{port}/auth/discord/callback")
@@ -221,8 +289,15 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
 
     let command_scope = if form.command_scope.is_empty() {
         crate::config::DEFAULT_COMMAND_SCOPE.to_string()
-    } else {
+    } else if form.command_scope == "guild" || form.command_scope == "global" {
         form.command_scope.clone()
+    } else {
+        let data = ErrorData {
+            code: 400,
+            title: "Invalid Command Scope".to_string(),
+            message: format!("Command scope must be 'guild' or 'global', got '{}'", form.command_scope),
+        };
+        return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
     };
 
     let presence_text = if form.presence_text.is_empty() {
@@ -574,7 +649,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let body = "botToken=mytoken&clientId=appid&clientSecret=&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fdiscord%2Fcallback&mongoUri=&sessionSecret=&adminIds=&guildId=&port=8080&presenceType=0&presenceText=Ready&commandScope=guild";
+        let body = "botToken=mytoken&clientId=123456789012345678&clientSecret=&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fdiscord%2Fcallback&mongoUri=&sessionSecret=&adminIds=&guildId=&port=8080&presenceType=0&presenceText=Ready&commandScope=guild";
 
         let resp = test_app()
             .oneshot(
@@ -598,7 +673,7 @@ client_id = "123"
         // Verify config.toml was written with the submitted values
         let written = std::fs::read_to_string(&config_path).unwrap();
         assert!(written.contains("mytoken"));
-        assert!(written.contains("appid"));
+        assert!(written.contains("123456789012345678"));
     }
 
     #[tokio::test]
