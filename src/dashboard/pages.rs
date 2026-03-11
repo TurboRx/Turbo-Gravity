@@ -116,7 +116,7 @@ input, select, textarea { font-family: inherit; }
   transition: background 0.15s, color 0.15s;
 }
 .nav-item:hover { background: rgba(124,58,237,0.1); color: var(--text); }
-.nav-item.active { background: rgba(124,58,237,0.15); color: var(--purple2); }
+.nav-item.active { background: rgba(124,58,237,0.15); color: var(--purple); }
 .nav-icon { font-size: 16px; width: 20px; text-align: center; }
 
 /* ── Main wrapper ────────────────────────────────────────────────────────── */
@@ -279,7 +279,7 @@ input, select, textarea { font-family: inherit; }
 /* ── Invite link ─────────────────────────────────────────────────────────── */
 .invite-link-box {
   display: flex; align-items: center; gap: 10px;
-  background: var(--bg3); border: 1px solid var(--border);
+  background: var(--bg3); border: 1px solid rgba(124,58,237,0.35);
   border-radius: 8px; padding: 10px 14px; margin-top: 8px;
 }
 .invite-link-text {
@@ -294,7 +294,7 @@ input, select, textarea { font-family: inherit; }
   border-radius: 12px; padding: 14px;
   display: flex; flex-direction: column; gap: 6px;
 }
-.module-header { display: flex; align-items: center; justify-content: space-between; }
+.module-header { display: flex; align-items: flex-start; justify-content: space-between; }
 .module-icon-name { display: flex; align-items: center; gap: 8px; }
 .module-icon {
   font-size: 18px; width: 32px; height: 32px;
@@ -515,6 +515,11 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
   .subgrid          { grid-template-columns: 1fr; }
   .module-grid      { grid-template-columns: 1fr 1fr; }
   .btn-actions      { flex-wrap: wrap; }
+  /* Tighten vertical gaps between cards on mobile */
+  .dashboard-grid   { gap: 12px; }
+  .col-left, .col-right { gap: 12px; }
+  /* Chart fills its container proportionally instead of a fixed height */
+  .chart-wrap       { height: auto; aspect-ratio: 16/7; }
 }
 
 /* ── Responsive: small mobile (≤ 480px) ─────────────────────────────────── */
@@ -523,7 +528,8 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
   .card             { padding: 14px; }
   .module-grid      { grid-template-columns: 1fr; }
   .btn-actions      { flex-direction: column; }
-  .btn-actions .btn { width: 100%; justify-content: center; }
+  /* Compact button height while keeping a 44px minimum touch target */
+  .btn-actions .btn { width: 100%; justify-content: center; padding: 10px 16px; min-height: 44px; }
   .uptime-val       { font-size: 22px; }
   .invite-link-box  { flex-direction: column; align-items: flex-start; }
   .invite-link-box .btn { width: 100%; justify-content: center; }
@@ -878,7 +884,9 @@ pub fn dashboard_page(data: &DashboardData) -> String {
               <label class="toggle">
                 <input type="checkbox" aria-label="Toggle Leveling module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label> to reward your most active members.</p>
+              </label>
+            </div>
+            <p class="module-desc">XP &amp; rank cards to reward your most active members.</p>
           </div>
 
           <div class="module-card">
