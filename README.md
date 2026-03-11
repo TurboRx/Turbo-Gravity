@@ -1,176 +1,183 @@
 # Turbo Gravity
 
-A powerful, feature-rich Discord bot with an **integrated web-based Control Panel**. Built with Node.js, discord.js v14, Express, and MongoDB.
+A powerful, feature-rich Discord bot with an **optional web-based Control Panel**. Rewritten in **Rust** using [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) for the bot and [Axum](https://github.com/tokio-rs/axum) for the dashboard API, with [Tokio](https://tokio.rs) as the async runtime.
+
+## Architecture
+
+```
+main.rs
+├── Arc<AppState>          ← shared state (config + optional MongoDB pool)
+│
+├── tokio::spawn → dashboard::serve()   ← optional Axum REST API (port 8080)
+│                  State<Arc<AppState>> ← same Arc injected into every route
+│
+└── bot::start()           ← Poise framework (blocks until shutdown)
+       ctx.data()          ← SharedState accessible in every command
+```
+
+### Key design decisions
+
+| Concern | Solution |
+|---|---|
+| Command framework | `poise 0.6` with `#[poise::command(slash_command)]` |
+| Shared state | `Arc<AppState>` — passed as Poise `Data` type and Axum `State` |
+| Dashboard toggle | `enable_dashboard = true/false` in `config.toml` |
+| Dashboard API | `axum 0.8` spawned via `tokio::spawn` before bot blocks |
+| Database | `mongodb 3` driver; bot operates without DB if URI is empty |
+| Configuration | `config.toml` (TOML) loaded at startup; `.env` also supported |
+| Async runtime | `tokio` with `full` features |
+
+---
 
 ## Features
 
-### Web Dashboard
-- **Zero-config Setup Wizard** - Configure everything through the browser
-- **OAuth2 Authentication** - Secure Discord login for admins
-- **Real-time Bot Control** - Start, stop, and restart the bot without CLI
-- **Dynamic Configuration** - Update credentials, presence, and settings on-the-fly
-- **Dark/Light Mode** - Beautiful glassmorphic UI with theme toggle
+### Bot Commands
 
-### Technical Highlights
-- **Independent Architecture** - Dashboard runs independently of bot lifecycle
-- **Persistent Configuration** - Settings stored in MongoDB + local file fallback
-- **Hot Reload** - Update bot settings without restarting the dashboard
-- **Secure Credentials** - Write-only password fields, no secret exposure
-- **Docker Ready** - Dockerfile and .dockerignore included
+| Category | Commands |
+|---|---|
+| **Fun** | `/daily`, `/work`, `/balance`, `/coinflip`, `/roll`, `/8ball` |
+| **Misc** | `/choose`, `/poll`, `/remind` |
+| **Moderation** | `/ban`, `/kick`, `/timeout`, `/warn`, `/warnings`, `/purge`, `/slowmode`, `/lock`, `/unlock`, `/unban` |
+| **Tickets** | `/ticket create`, `/ticket close`, `/ticket add`, `/ticket remove` |
+| **Utility** | `/ping`, `/uptime`, `/stats`, `/help`, `/userinfo`, `/serverinfo`, `/channelinfo`, `/roleinfo`, `/avatar`, `/embed`, `/contime` |
+
+### Optional Dashboard API
+
+When `enable_dashboard = true` in `config.toml`, an Axum HTTP server starts in parallel with the bot:
+
+| Route | Description |
+|---|---|
+| `GET /health` | Liveness probe — returns `{"status":"ok","version":"..."}` |
+| `GET /api/stats` | Runtime stats (DB connected, bot configured, port) |
+| `GET /api/config` | Public (non-secret) config values |
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
-- MongoDB (local or hosted)
-- Discord Application ([Discord Developer Portal](https://discord.com/developers/applications))
+- Rust (stable, 1.75+) — install via [rustup](https://rustup.rs)
+- MongoDB (optional — bot works without a database)
+- A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
    git clone https://github.com/TurboRx/Turbo-Gravity.git
-   cd Turbo-Gravity-
+   cd Turbo-Gravity
    ```
 
-2. **Install dependencies**
+2. **Configure the bot**
    ```bash
-   npm install
+   # config.toml is already present — edit it with your values
+   nano config.toml
    ```
+   At minimum you need `bot.token`. Everything else has sensible defaults.
 
-3. **Start the application**
+3. **Build and run**
    ```bash
-   npm start
+   cargo run --release
    ```
 
-4. **Open the setup wizard**
-   Navigate to `http://localhost:8080/setup` in your browser.
+The bot registers slash commands to the guild specified by `guild_id` (instant) or globally (up to 1 hour delay) based on `command_scope`.
 
 ---
 
-## Configuration
+## Configuration (`config.toml`)
 
-### Setup Wizard (Recommended)
+```toml
+[bot]
+token        = ""              # Required: Discord bot token
+client_id    = ""              # Discord application/client ID
+guild_id     = ""              # Leave empty for global command registration
+command_scope = "guild"        # "guild" (instant) or "global"
+presence_text = "Ready to serve"
+presence_type = 0              # 0=Playing 1=Streaming 2=Listening 3=Watching 4=Competing
 
-The first time you run the app, you'll be redirected to `/setup` where you can configure:
+[database]
+mongo_uri = ""                 # Optional: MongoDB URI; leave empty to run without DB
 
-#### Discord Bot Credentials
-- **Bot Token** - From your Discord application
-- **Client ID** - Your application ID
-- **Client Secret** - OAuth2 client secret
-- **OAuth Callback URL** - Default: `http://localhost:8080/auth/discord/callback`
+[dashboard]
+enable_dashboard = true        # Set to false to disable the web API entirely
+port             = 8080
+session_secret   = ""          # Reserved for future OAuth2 session signing
+client_secret    = ""          # Reserved for future Discord OAuth2 login
+callback_url     = "http://localhost:8080/auth/discord/callback"
+admin_ids        = []          # Reserved for future admin access control
+```
 
-#### Database & Security
-- **MongoDB URI** - Connection string (e.g., `mongodb://localhost:27017/turbogravity`)
-- **Session Secret** - Random secure string for session encryption
-- **Admin User IDs** - Comma-separated Discord user IDs with dashboard access
-
-#### Bot Settings
-- **Guild ID** - Optional, for guild-only command registration
-- **Port** - Dashboard port (default: 8080)
-- **Presence Type** - Playing, Listening, Watching, Competing
-- **Presence Text** - Default bot status text
-- **Command Scope** - Guild (instant) or Global (up to 1 hour)
-- **Invite Permissions** - Permission integer for invite link
-- **Auto-start** - Whether to start the bot on app launch
-
-### Manual Configuration (Optional)
-
-Copy `.env.example` to `.env` and fill values (settings will still be imported into the setup wizard).
-
----
-
-## Usage
-
-### Dashboard Access
-1. Visit `http://localhost:8080`
-2. Login with Discord OAuth
-3. Only configured admin users can access controls
-
-### Control Panel Features
-- **Lifecycle Controls** - Start/Stop/Restart buttons
-- **Status Manager** - Update bot presence in real-time
-- **Configuration Editor** - Modify all settings including credentials
-- **Invite Link** - One-click bot invite with configured permissions
-
-### Bot Commands
-All commands are slash commands (`/`). Once the bot is running, they'll be registered automatically based on your scope setting (guild or global).
+Environment variables in a `.env` file are loaded automatically (via `dotenvy`) and can be used alongside `config.toml`.
 
 ---
 
 ## Docker Deployment
 
-### Using Pre-built Image (Recommended)
-
-Pull the latest image from GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/turborx/turbo-gravity:main
-```
-
-Run the container:
-```bash
-docker run -d \
-  -p 8080:8080 \
-  --name turbo-gravity \
-  ghcr.io/turborx/turbo-gravity:main
-```
-
-### Build Image Locally
+### Build locally
 
 ```bash
 docker build -t turbo-gravity .
 ```
 
-Run the container:
+### Run
+
 ```bash
 docker run -d \
   -p 8080:8080 \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
   --name turbo-gravity \
   turbo-gravity
 ```
 
-Then visit `http://localhost:8080/setup` to configure via the web interface.
+The binary reads `config.toml` from its working directory at startup. Mount your config at `/app/config.toml` — **never bake secrets into the image**.
 
 ---
 
 ## Development
 
-### Run with Auto-restart
-```bash
-npm run dev
+### Adding a new command
+
+1. Create `src/bot/commands/<category>/mycommand.rs`
+2. Write the handler following the Poise pattern:
+   ```rust
+   use crate::bot::{Context, Error};
+
+   /// Brief description shown in /help
+   #[poise::command(slash_command, ephemeral)]
+   pub async fn mycommand(ctx: Context<'_>) -> Result<(), Error> {
+       ctx.say("Hello!").await?;
+       Ok(())
+   }
+   ```
+3. Add `mod mycommand;` and include `mycommand::mycommand()` in the `commands()` vec in `src/bot/commands/<category>/mod.rs`
+
+### Accessing shared state inside a command
+
+```rust
+// ctx.data() returns &Arc<AppState>
+let db = match ctx.data().database() {
+    Some(db) => db,
+    None => { ctx.say("No database configured.").await?; return Ok(()); }
+};
 ```
 
-### Add a New Command
-1. Create a file in `src/commands/<category>/commandname.js`
-2. Export an object with `data` (SlashCommandBuilder) and `execute` function
-3. Restart the bot or trigger a reload from the dashboard
+### Lint / check
 
-Example:
-```javascript
-import { SlashCommandBuilder } from 'discord.js';
-
-export default {
-  data: new SlashCommandBuilder()
-    .setName('hello')
-    .setDescription('Says hello'),
-  async execute(interaction) {
-    await interaction.reply('Hello!');
-  }
-};
+```bash
+cargo check          # fast type-check
+cargo clippy         # lints
+cargo build --release
 ```
 
 ---
 
 ## Security Notes
 
-- Admin IDs are checked on every protected route
-- Secrets (tokens, passwords) are write-only in the dashboard
-- Session secret should be a strong random string
-- MongoDB URI should use authentication in production
-- Use HTTPS in production (reverse proxy like nginx/caddy)
+- **Never commit `config.toml`** with real tokens — it is listed in `.gitignore`
+- `session_secret` and `client_secret` are reserved for future OAuth2 support
+- Use HTTPS in production via a reverse proxy (nginx, Caddy, Traefik)
+- MongoDB URI should use credentials in production
+- The dashboard API has **no authentication** in the current release — restrict access at the network/proxy level until OAuth2 is implemented
 
 ---
 
@@ -182,15 +189,7 @@ export default {
 
 ## Contributing
 
-We welcome contributions from the community! Whether you're fixing bugs, adding features, improving documentation, or suggesting enhancements, your help is appreciated.
-
-Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
-- How to set up your development environment
-- Our code style and commit guidelines
-- The pull request process
-- How to report bugs and suggest features
-
-For major changes, please open an issue first to discuss what you'd like to change.
+We welcome contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for commit guidelines and the PR process. For major changes, open an issue first.
 
 ---
 

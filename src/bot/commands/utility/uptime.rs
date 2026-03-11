@@ -7,17 +7,30 @@ fn format_duration(secs: u64) -> String {
     let minutes = (secs % 3600) / 60;
     let seconds = secs % 60;
     let mut parts = Vec::new();
-    if days > 0 {
-        parts.push(format!("{days}d"));
-    }
-    if hours > 0 {
-        parts.push(format!("{hours}h"));
-    }
-    if minutes > 0 {
-        parts.push(format!("{minutes}m"));
-    }
+    if days > 0 { parts.push(format!("{days}d")); }
+    if hours > 0 { parts.push(format!("{hours}h")); }
+    if minutes > 0 { parts.push(format!("{minutes}m")); }
     parts.push(format!("{seconds}s"));
     parts.join(" ")
+}
+
+/// Read system uptime in seconds from /proc/uptime (Linux only)
+fn system_uptime_secs() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/uptime")
+            .ok()
+            .and_then(|s| {
+                s.split_whitespace()
+                    .next()
+                    .and_then(|v| v.parse::<f64>().ok())
+            })
+            .map(|s| s as u64)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }
 
 /// Show bot process and connection uptime
@@ -25,22 +38,14 @@ fn format_duration(secs: u64) -> String {
 pub async fn uptime(ctx: Context<'_>) -> Result<(), Error> {
     let api_ms = ctx.ping().await.as_millis();
 
-    // Process uptime from /proc/uptime
-    let process_secs = std::fs::read_to_string("/proc/uptime")
-        .ok()
-        .and_then(|s| {
-            s.split_whitespace()
-                .next()
-                .and_then(|v| v.parse::<f64>().ok())
-        })
-        .map(|s| s as u64)
-        .unwrap_or(0);
-
-    let embed = serenity::CreateEmbed::new()
+    let mut embed = serenity::CreateEmbed::new()
         .title("Uptime")
         .colour(serenity::Colour::from_rgb(34, 197, 94))
-        .field("Process", format_duration(process_secs), true)
-        .field("API Ping", format!("{api_ms}ms"), true);
+        .field("📡 API Ping", format!("{api_ms}ms"), true);
+
+    if let Some(secs) = system_uptime_secs() {
+        embed = embed.field("⏱ System Uptime", format_duration(secs), true);
+    }
 
     ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())

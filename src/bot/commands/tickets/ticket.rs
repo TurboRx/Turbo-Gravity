@@ -1,3 +1,9 @@
+// Member::permissions is deprecated in serenity 0.12 in favour of
+// Guild::user_permissions_in which considers overwrites.  For our simple
+// MANAGE_CHANNELS check the base-guild permissions are sufficient, and
+// holding a Guild CacheRef across async boundaries is not allowed.
+#![allow(deprecated)]
+
 use crate::bot::{Context, Error};
 use poise::serenity_prelude as serenity;
 

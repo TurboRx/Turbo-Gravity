@@ -1,19 +1,19 @@
 # ── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM rust:1.93-slim-bookworm AS builder
+FROM rust:1-slim-bookworm AS builder
 
 WORKDIR /app
 
 # Install system dependencies needed by some crates (openssl, pkg-config)
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-# Cache dependency layer: copy manifests first, build a dummy binary so
-# Cargo's dependency fetch is cached separately from source changes.
+# Pre-fetch dependencies into the Cargo registry cache.
+# Copying only the manifests means this layer is rebuilt only when
+# Cargo.toml / Cargo.lock change, not when source files change.
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo 'fn main(){}' > src/main.rs \
-    && cargo build --release 2>/dev/null || true \
-    && rm -rf src
+RUN cargo fetch
 
-# Now copy the real source and build the release binary
+# Build the real binary.  Dependencies are already fetched above so this
+# only recompiles what changed.
 COPY src ./src
 RUN cargo build --release
 

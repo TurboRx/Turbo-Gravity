@@ -12,6 +12,8 @@ pub struct Config {
     pub dashboard: DashboardConfig,
 }
 
+/// Bot configuration loaded from `[bot]` section of `config.toml`.
+#[allow(dead_code)] // client_id reserved for future OAuth2 use
 #[derive(Debug, Clone, Deserialize)]
 pub struct BotConfig {
     pub token: String,
@@ -32,6 +34,10 @@ pub struct DatabaseConfig {
     pub mongo_uri: String,
 }
 
+/// Dashboard / OAuth2 configuration loaded from `[dashboard]` section.
+// Fields like session_secret, client_secret, callback_url, and admin_ids
+// are intentionally included for future Discord OAuth2 login support.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct DashboardConfig {
     #[serde(default = "default_enable_dashboard")]

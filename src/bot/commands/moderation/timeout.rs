@@ -1,5 +1,4 @@
 use crate::bot::{Context, Error};
-use chrono::Utc;
 use poise::serenity_prelude as serenity;
 
 /// Timeout a member

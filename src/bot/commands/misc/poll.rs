@@ -30,13 +30,13 @@ pub async fn poll(
         .map(|(i, opt)| format!("{} {opt}", NUMBER_EMOJIS[i]))
         .collect();
 
-    let embed = serenity::CreateEmbed::default()
+    let embed = serenity::CreateEmbed::new()
         .title(format!("📊 {question}"))
         .description(lines.join("\n"))
         .colour(serenity::Colour::from_rgb(245, 158, 11))
         .footer(serenity::CreateEmbedFooter::new(format!(
             "Poll by {}",
-            ctx.author().tag()
+            ctx.author().name
         )));
 
     let reply = ctx

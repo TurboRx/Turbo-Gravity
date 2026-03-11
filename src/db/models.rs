@@ -163,6 +163,18 @@ impl Warning {
 // Helper: convert BsonDateTime to chrono::DateTime<Utc>
 // ---------------------------------------------------------------------------
 
+/// Helper: convert BsonDateTime → chrono::DateTime<Utc>.
+/// Logs a warning and returns the Unix epoch if the timestamp is out of range.
 pub fn bson_dt_to_chrono(dt: BsonDateTime) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(dt.timestamp_millis()).unwrap_or_default()
+    match DateTime::from_timestamp_millis(dt.timestamp_millis()) {
+        Some(ts) => ts,
+        None => {
+            tracing::warn!(
+                "bson_dt_to_chrono: timestamp {} ms is out of chrono range, \
+                 falling back to Unix epoch",
+                dt.timestamp_millis()
+            );
+            DateTime::default()
+        }
+    }
 }
