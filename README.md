@@ -34,7 +34,7 @@ Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity
 
 - [Rust (stable)](https://rustup.rs) — install via rustup
 - A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
-- MongoDB (optional — bot runs without a database)
+- [MongoDB](https://www.mongodb.com/) (optional — bot runs without a database)
 
 ### Installation
 
