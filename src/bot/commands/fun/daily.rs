@@ -2,7 +2,7 @@ use crate::bot::{Context, Error};
 use crate::db::models::User;
 use mongodb::bson::DateTime as BsonDateTime;
 use poise::serenity_prelude as serenity;
-use rand::Rng;
+use rand::RngExt as _;
 
 const DAILY_COOLDOWN_SECS: i64 = 24 * 60 * 60;
 const MIN_COINS: i64 = 100;
@@ -45,7 +45,7 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let earned = rand::thread_rng().gen_range(MIN_COINS..=MAX_COINS);
+    let earned = rand::rng().random_range(MIN_COINS..=MAX_COINS);
     profile.balance += earned;
     profile.xp += XP_GAINED;
     profile.last_daily = Some(BsonDateTime::now());

@@ -1,5 +1,5 @@
 use crate::bot::{Context, Error};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 
 /// Let the bot pick from your options
 #[poise::command(slash_command, ephemeral)]
@@ -27,7 +27,7 @@ pub async fn choose(
     }
 
     let choice = choices
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rand::rng())
         .copied()
         .unwrap_or("¯\\_(ツ)_/¯");
 

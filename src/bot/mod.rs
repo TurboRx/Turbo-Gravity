@@ -109,3 +109,41 @@ fn presence_activity(presence_type: u8, text: &str) -> serenity::ActivityData {
         _ => serenity::ActivityData::playing(text),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn presence_type_0_is_playing() {
+        let a = presence_activity(0, "test");
+        assert_eq!(a.name, "test");
+        // Playing maps to ActivityType::Playing (0)
+        assert_eq!(a.kind, serenity::ActivityType::Playing);
+    }
+
+    #[test]
+    fn presence_type_2_is_listening() {
+        let a = presence_activity(2, "lofi beats");
+        assert_eq!(a.name, "lofi beats");
+        assert_eq!(a.kind, serenity::ActivityType::Listening);
+    }
+
+    #[test]
+    fn presence_type_3_is_watching() {
+        let a = presence_activity(3, "a stream");
+        assert_eq!(a.kind, serenity::ActivityType::Watching);
+    }
+
+    #[test]
+    fn presence_type_4_is_competing() {
+        let a = presence_activity(4, "a tournament");
+        assert_eq!(a.kind, serenity::ActivityType::Competing);
+    }
+
+    #[test]
+    fn presence_type_unknown_defaults_to_playing() {
+        let a = presence_activity(99, "something");
+        assert_eq!(a.kind, serenity::ActivityType::Playing);
+    }
+}

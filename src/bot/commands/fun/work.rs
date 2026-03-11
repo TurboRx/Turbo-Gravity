@@ -2,7 +2,7 @@ use crate::bot::{Context, Error};
 use crate::db::models::User;
 use mongodb::bson::DateTime as BsonDateTime;
 use poise::serenity_prelude as serenity;
-use rand::{seq::SliceRandom, Rng};
+use rand::{seq::IndexedRandom, RngExt as _};
 
 const WORK_COOLDOWN_SECS: i64 = 60 * 60;
 const MIN_COINS: i64 = 25;
@@ -57,9 +57,9 @@ pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let earned = rand::thread_rng().gen_range(MIN_COINS..=MAX_COINS);
+    let earned = rand::rng().random_range(MIN_COINS..=MAX_COINS);
     let message = WORK_MESSAGES
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rand::rng())
         .copied()
         .unwrap_or("You worked hard and earned");
 

@@ -178,3 +178,90 @@ pub fn bson_dt_to_chrono(dt: BsonDateTime) -> DateTime<Utc> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bson_dt_to_chrono_unix_epoch() {
+        let bson_dt = BsonDateTime::from_millis(0);
+        let chrono_dt = bson_dt_to_chrono(bson_dt);
+        assert_eq!(chrono_dt.timestamp(), 0);
+        assert_eq!(chrono_dt.timestamp_millis(), 0);
+    }
+
+    #[test]
+    fn bson_dt_to_chrono_known_timestamp() {
+        let ms: i64 = 1_700_000_000_000;
+        let bson_dt = BsonDateTime::from_millis(ms);
+        let chrono_dt = bson_dt_to_chrono(bson_dt);
+        assert_eq!(chrono_dt.timestamp_millis(), ms);
+    }
+
+    #[test]
+    fn bson_dt_to_chrono_out_of_range_falls_back_to_epoch() {
+        // i64::MAX milliseconds is far beyond chrono's supported range
+        let bson_dt = BsonDateTime::from_millis(i64::MAX);
+        let chrono_dt = bson_dt_to_chrono(bson_dt);
+        // Should fall back to the default (epoch)
+        assert_eq!(chrono_dt, DateTime::<Utc>::default());
+    }
+
+    #[test]
+    fn user_default_level_is_one() {
+        let user = User {
+            id: None,
+            discord_id: "test".to_string(),
+            username: "tester".to_string(),
+            discriminator: "0001".to_string(),
+            avatar: None,
+            balance: 0,
+            xp: 0,
+            level: default_level(),
+            last_daily: None,
+            last_work: None,
+        };
+        assert_eq!(user.level, 1);
+    }
+
+    #[test]
+    fn level_up_loop_consumes_xp_correctly() {
+        // Simulate the level-up logic used in daily.rs / work.rs
+        let mut xp: i64 = 250;
+        let mut level: i64 = 1;
+        while xp >= level * 100 {
+            xp -= level * 100;
+            level += 1;
+        }
+        // 250 xp: level 1 costs 100 → xp=150, level=2; level 2 costs 200 → xp=150 < 200, stop
+        assert_eq!(level, 2);
+        assert_eq!(xp, 150);
+    }
+
+    #[test]
+    fn level_up_loop_no_infinite_loop_when_xp_zero() {
+        let mut xp: i64 = 0;
+        let mut level: i64 = 1;
+        while xp >= level * 100 {
+            xp -= level * 100;
+            level += 1;
+        }
+        assert_eq!(level, 1);
+        assert_eq!(xp, 0);
+    }
+
+    #[test]
+    fn level_up_multiple_levels() {
+        // Enough XP to level up from 1 through several levels
+        let mut xp: i64 = 1 + 100 + 200 + 300; // just over level 3 threshold
+        let mut level: i64 = 1;
+        while xp >= level * 100 {
+            xp -= level * 100;
+            level += 1;
+        }
+        // 601 xp: L1 costs 100→501, L2 costs 200→301, L3 costs 300→1, L4 costs 400 → stop
+        assert_eq!(level, 4);
+        assert_eq!(xp, 1);
+    }
+}

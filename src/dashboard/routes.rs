@@ -171,3 +171,267 @@ pub fn router() -> Router<SharedState> {
         .route("/api/config", get(public_config))
         .fallback(not_found)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use axum::{
+        body::{self, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    use crate::{config, state};
+
+    fn test_state() -> state::SharedState {
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = "test-token"
+client_id = "123456"
+guild_id = "999"
+
+[dashboard]
+enable_dashboard = true
+port = 8080
+"#,
+        )
+        .expect("test config must parse");
+        Arc::new(state::AppState::new(cfg, None))
+    }
+
+    fn test_app() -> axum::Router {
+        router().with_state(test_state())
+    }
+
+    async fn body_string(b: Body) -> String {
+        let bytes = body::to_bytes(b, usize::MAX).await.unwrap();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    // ------------------------------------------------------------------
+    // /health
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn health_returns_200() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn health_body_contains_ok_status() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["status"], "ok");
+        assert!(v["version"].is_string());
+    }
+
+    // ------------------------------------------------------------------
+    // /api/stats
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn api_stats_returns_200() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_stats_bot_configured_true_when_token_set() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["bot_configured"], true);
+        assert_eq!(v["database_connected"], false);
+        assert_eq!(v["dashboard_port"], 8080);
+    }
+
+    #[tokio::test]
+    async fn api_stats_bot_configured_false_when_no_token() {
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let app = router().with_state(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["bot_configured"], false);
+    }
+
+    // ------------------------------------------------------------------
+    // /api/config
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn api_config_returns_200() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_config_fields() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["command_scope"], "guild");
+        assert_eq!(v["guild_id"], "999");
+        assert_eq!(v["dashboard_port"], 8080);
+        assert_eq!(v["enable_dashboard"], true);
+    }
+
+    // ------------------------------------------------------------------
+    // HTML pages
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn root_redirects_to_dashboard() {
+        let resp = test_app()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            resp.headers().get("location").unwrap(),
+            "/dashboard"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/dashboard")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("text/html"), "expected text/html, got {ct}");
+    }
+
+    #[tokio::test]
+    async fn setup_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn selector_page_returns_html() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/selector")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // ------------------------------------------------------------------
+    // Static asset
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn styles_css_returns_css_content_type() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/styles.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("text/css"), "expected text/css, got {ct}");
+    }
+
+    // ------------------------------------------------------------------
+    // Fallback / 404
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn unknown_route_returns_404() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/this-route-does-not-exist")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+}

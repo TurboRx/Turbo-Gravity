@@ -95,3 +95,77 @@ pub fn load() -> anyhow::Result<Config> {
     let cfg: Config = toml::from_str(&raw).context("Failed to parse config.toml")?;
     Ok(cfg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_toml() -> &'static str {
+        r#"
+[bot]
+token = "test-token"
+client_id = "123456"
+"#
+    }
+
+    #[test]
+    fn parse_minimal_config_applies_defaults() {
+        let cfg: Config = toml::from_str(minimal_toml()).unwrap();
+        assert_eq!(cfg.bot.token, "test-token");
+        assert_eq!(cfg.bot.client_id, "123456");
+        // defaults
+        assert_eq!(cfg.bot.command_scope, "guild");
+        assert_eq!(cfg.bot.presence_text, "Ready to serve");
+        assert_eq!(cfg.bot.presence_type, 0);
+        assert!(cfg.database.mongo_uri.is_empty());
+        assert!(!cfg.dashboard.enable_dashboard);
+        assert_eq!(cfg.dashboard.port, 8080);
+    }
+
+    #[test]
+    fn parse_full_config() {
+        let toml = r#"
+[bot]
+token = "bot-token"
+client_id = "app-id"
+guild_id = "my-guild"
+command_scope = "global"
+presence_text = "with Rust"
+presence_type = 2
+
+[database]
+mongo_uri = "mongodb://localhost:27017"
+
+[dashboard]
+enable_dashboard = true
+port = 9090
+admin_ids = ["111", "222"]
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.bot.guild_id, "my-guild");
+        assert_eq!(cfg.bot.command_scope, "global");
+        assert_eq!(cfg.bot.presence_type, 2);
+        assert_eq!(cfg.database.mongo_uri, "mongodb://localhost:27017");
+        assert!(cfg.dashboard.enable_dashboard);
+        assert_eq!(cfg.dashboard.port, 9090);
+        assert_eq!(cfg.dashboard.admin_ids, vec!["111", "222"]);
+    }
+
+    #[test]
+    fn missing_required_fields_returns_error() {
+        // token and client_id are required with no defaults
+        let result: Result<Config, _> = toml::from_str("[bot]\ntoken = \"x\"");
+        assert!(result.is_err(), "client_id is required");
+    }
+
+    #[test]
+    fn dashboard_default_impl_matches_parsed_defaults() {
+        let default = DashboardConfig::default();
+        assert!(!default.enable_dashboard);
+        assert_eq!(default.port, 8080);
+        assert_eq!(
+            default.callback_url,
+            "http://localhost:8080/auth/discord/callback"
+        );
+    }
+}
