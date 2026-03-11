@@ -538,9 +538,9 @@ fn build_topbar(page_name: &str) -> String {
     <span class="topbar-page">{page_name}</span>
   </div>
   <div class="topbar-right">
-    <input class="search-box" type="text" placeholder="Search&#x2026;" />
-    <button class="notif-btn" title="Notifications">&#x1F514;<span class="notif-dot"></span></button>
-    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#x1F319;</button>
+    <input class="search-box" type="text" placeholder="Search&#x2026;" aria-label="Search" />
+    <button class="notif-btn" title="Notifications" aria-label="Notifications">&#x1F514;<span class="notif-dot"></span></button>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">&#x1F319;</button>
     <div class="avatar">TG</div>
   </div>
 </header>
@@ -733,7 +733,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Moderation</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" checked />
+                <input type="checkbox" checked aria-label="Toggle Moderation module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -747,7 +747,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Economy</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" checked />
+                <input type="checkbox" checked aria-label="Toggle Economy module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -761,7 +761,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Fun</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" checked />
+                <input type="checkbox" checked aria-label="Toggle Fun module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -775,11 +775,9 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Leveling</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" />
+                <input type="checkbox" aria-label="Toggle Leveling module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-            </div>
-            <p class="module-desc">XP &amp; rank system to reward your most active members.</p>
+              </label> to reward your most active members.</p>
           </div>
 
           <div class="module-card">
@@ -789,7 +787,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Utilities</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" checked />
+                <input type="checkbox" checked aria-label="Toggle Utilities module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -803,7 +801,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                 <span class="module-name">Tickets</span>
               </div>
               <label class="toggle">
-                <input type="checkbox" />
+                <input type="checkbox" aria-label="Toggle Tickets module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -1024,11 +1022,11 @@ pub fn selector_page(data: &SelectorData) -> String {
                 None    => String::new(),
             };
             format!(
-                r#"<a class="guild-card" href="/dashboard?guild={gid}">
+                r#"<a class="guild-card" href="/dashboard?guild={gid}" aria-label="Select server {name}">
   <div class="guild-icon">{icon_html}</div>
   <span class="guild-name">{name}</span>
   {members_html}
-  <button class="guild-select-btn" type="button">Select Server</button>
+  <span class="guild-select-btn" aria-hidden="true">Select Server</span>
 </a>
 "#
             )
