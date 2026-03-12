@@ -1,53 +1,17 @@
 use axum::{
     body::Bytes,
-    extract::{ConnectInfo, Multipart, State},
+    extract::{Multipart, State},
     http::{header, StatusCode},
-    middleware::Next,
     response::{Html, IntoResponse, Json, Response},
     routing::get,
     Form, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 
 use crate::state::SharedState;
 use super::pages::{
     self, DashboardData, ErrorData, SelectorData, SetupData,
 };
-
-// ---------------------------------------------------------------------------
-// Security middleware
-// ---------------------------------------------------------------------------
-
-/// Reject any request that does not originate from a loopback address.
-///
-/// Applied to the `/api/config/backup` and `/api/config/restore` endpoints
-/// because they expose or overwrite `config.toml` (which contains the bot
-/// token and other secrets).
-///
-/// [`ConnectInfo`] is present in request extensions when the server is started
-/// with `into_make_service_with_connect_info`.  If it is absent (e.g. in unit
-/// tests that bypass the TCP layer) the check is skipped so tests continue to
-/// work without a real network connection.
-async fn require_loopback(request: axum::extract::Request, next: Next) -> Response {
-    let is_local = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip().is_loopback())
-        .unwrap_or(true); // no ConnectInfo → unit-test context, allow through
-
-    if is_local {
-        next.run(request).await
-    } else {
-        (
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": "This endpoint is only accessible from localhost"
-            })),
-        )
-            .into_response()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -87,9 +51,12 @@ async fn stats(State(state): State<SharedState>) -> Json<StatsResponse> {
     })
 }
 
-/// GET /api/config — returns public (non-secret) configuration fields
+/// GET /api/config — returns configuration fields for the admin dashboard.
+///
+/// This handler is registered under `config_router()` which is protected by the
+/// `require_admin` middleware, so it is only reachable by authenticated admins.
 #[derive(Serialize)]
-struct PublicConfig {
+struct AdminConfig {
     command_scope: String,
     presence_text: String,
     guild_id: String,
@@ -97,8 +64,8 @@ struct PublicConfig {
     enable_dashboard: bool,
 }
 
-async fn public_config(State(state): State<SharedState>) -> Json<PublicConfig> {
-    Json(PublicConfig {
+async fn public_config(State(state): State<SharedState>) -> Json<AdminConfig> {
+    Json(AdminConfig {
         command_scope: state.config.bot.command_scope.clone(),
         presence_text: state.config.bot.presence_text.clone(),
         guild_id: state.config.bot.guild_id.clone(),
@@ -159,8 +126,17 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
     Html(pages::dashboard_page(&data))
 }
 
-/// GET /setup — first-run setup wizard page
-async fn setup_page(State(state): State<SharedState>) -> Html<String> {
+/// GET /setup — first-run setup wizard page.
+///
+/// Only renders the full form (including bot token and OAuth secrets) when the
+/// bot is not yet configured (`needs_setup` is true).  Once the bot is
+/// configured, visiting `/setup` redirects to `/dashboard` so that secrets are
+/// never exposed to unauthenticated users on a publicly-bound server.
+async fn setup_page(State(state): State<SharedState>) -> Response {
+    if !crate::config::needs_setup(&state.config) {
+        // Setup already complete — redirect away to avoid exposing secrets.
+        return (StatusCode::FOUND, [(header::LOCATION, "/dashboard")]).into_response();
+    }
     let data = SetupData {
         token: state.config.bot.token.clone(),
         owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
@@ -177,7 +153,7 @@ async fn setup_page(State(state): State<SharedState>) -> Html<String> {
         online_status: state.config.bot.online_status.clone(),
         avatar_url: state.config.bot.avatar_url.clone(),
     };
-    Html(pages::setup_page(&data))
+    Html(pages::setup_page(&data)).into_response()
 }
 
 /// GET /selector — guild selector page
@@ -249,6 +225,18 @@ fn default_port_str() -> String {
 /// `POST /setup` — save the wizard form to `config.toml` and show the setup-complete page.
 async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupForm>) -> Response {
     use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
+
+    // Only allow form submission during initial setup (before a bot token is configured).
+    // Once the bot is configured the endpoint is closed to prevent unauthenticated
+    // overwrites of config.toml from a publicly-accessible server.
+    if !crate::config::needs_setup(&state.config) {
+        let data = ErrorData {
+            code: 403,
+            title: "Forbidden".to_string(),
+            message: "Setup is already complete. Use the dashboard settings to modify configuration.".to_string(),
+        };
+        return (StatusCode::FORBIDDEN, Html(pages::error_page(&data))).into_response();
+    }
 
     // Validate port
     let port: u16 = match form.port.parse() {
@@ -757,9 +745,11 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 // Router
 // ---------------------------------------------------------------------------
 
-/// Build the Axum router.  State is attached in `dashboard::serve()` so this
-/// function only declares routes — keeping concerns separated.
-pub fn router() -> Router<SharedState> {
+/// Build the public Axum router (routes that do NOT require authentication).
+///
+/// The `/api/config/*` routes and `/dashboard/settings` live in [`config_router`]
+/// and are composed with the admin auth middleware in `dashboard::serve()`.
+pub fn public_router() -> Router<SharedState> {
     use axum::routing::post;
     Router::new()
         // Static assets
@@ -767,6 +757,9 @@ pub fn router() -> Router<SharedState> {
         // HTML pages
         .route("/", get(root))
         .route("/dashboard", get(dashboard_page))
+        // /setup is only usable during initial setup mode (no bot token configured).
+        // The handler itself redirects to /dashboard once setup is complete so
+        // that bot secrets are never exposed to unauthenticated visitors.
         .route("/setup", get(setup_page).post(setup_submit))
         .route("/selector", get(selector_page))
         // Dashboard quick-action controls (JSON responses)
@@ -774,29 +767,43 @@ pub fn router() -> Router<SharedState> {
         .route("/control/stop",            post(control_stop))
         .route("/control/clear-cache",     post(control_clear_cache))
         .route("/control/reload-commands", post(control_reload_commands))
-        // Dashboard settings form
-        .route("/dashboard/settings", post(dashboard_settings))
-        // Config backup / restore — both endpoints are restricted to loopback
-        // connections (`require_loopback` middleware) because they expose or
-        // overwrite `config.toml` which contains the bot token and secrets.
-        // The restore route additionally applies a 5 MB body limit to prevent
-        // memory exhaustion from large or malicious ZIP uploads.
-        .route(
-            "/api/config/backup",
-            get(config_backup)
-                .layer(axum::middleware::from_fn(require_loopback)),
-        )
-        .route(
-            "/api/config/restore",
-            post(config_restore)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024))
-                .layer(axum::middleware::from_fn(require_loopback)),
-        )
-        // JSON API
+        // Public JSON API (health + stats do not expose secrets)
         .route("/health", get(health))
         .route("/api/stats", get(stats))
-        .route("/api/config", get(public_config))
         .fallback(not_found)
+}
+
+/// Build the router for admin-only sub-routes.
+///
+/// These routes are nested under `/api/config` and also include
+/// `/dashboard/settings`.  They are all wrapped with the `require_admin`
+/// middleware in `dashboard::serve()`.  The path prefixes here are **relative**
+/// to `/api/config` (e.g. `/backup` maps to `/api/config/backup`).
+pub fn config_router() -> Router<SharedState> {
+    use axum::routing::post;
+    Router::new()
+        // GET /api/config — returns admin-only configuration fields
+        .route("/", get(public_config))
+        // GET /api/config/backup — download config.toml inside a ZIP
+        .route("/backup", get(config_backup))
+        // POST /api/config/restore — restore config.toml from an uploaded ZIP
+        // Apply a 5 MB body limit to prevent memory exhaustion from large uploads.
+        .route(
+            "/restore",
+            post(config_restore)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+}
+
+/// Build the admin-only router for dashboard management routes that are NOT
+/// nested under `/api/config` (e.g., `/dashboard/settings`).
+///
+/// Wrapped with `require_admin` middleware in `dashboard::serve()`.
+pub fn admin_router() -> Router<SharedState> {
+    use axum::routing::post;
+    Router::new()
+        // POST /dashboard/settings — persist presence/command scope to config.toml.
+        .route("/dashboard/settings", post(dashboard_settings))
 }
 
 #[cfg(test)]
@@ -835,7 +842,16 @@ port = 8080
     }
 
     fn test_app() -> axum::Router {
-        router().with_state(test_state())
+        public_router().with_state(test_state())
+    }
+
+    /// Full app including config routes (without auth middleware) for unit
+    /// testing the route handlers in isolation.
+    fn full_test_app() -> axum::Router {
+        let state = test_state();
+        public_router()
+            .nest("/api/config", config_router())
+            .with_state(state)
     }
 
     const TEST_MAX_BODY_SIZE: usize = 4 * 1024 * 1024;
@@ -917,7 +933,7 @@ client_id = "123"
         )
         .unwrap();
         let state = Arc::new(state::AppState::new(cfg, None));
-        let app = router().with_state(state);
+        let app = public_router().with_state(state);
 
         let resp = app
             .oneshot(
@@ -939,7 +955,7 @@ client_id = "123"
 
     #[tokio::test]
     async fn api_config_returns_200() {
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config")
@@ -953,7 +969,7 @@ client_id = "123"
 
     #[tokio::test]
     async fn api_config_fields() {
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config")
@@ -1000,7 +1016,7 @@ client_id = "123"
         )
         .unwrap();
         let state = Arc::new(state::AppState::new(cfg, None));
-        let app = router().with_state(state);
+        let app = public_router().with_state(state);
 
         let resp = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -1027,8 +1043,19 @@ client_id = "123"
     }
 
     #[tokio::test]
-    async fn setup_page_returns_html() {
-        let resp = test_app()
+    async fn setup_page_returns_html_in_setup_mode() {
+        // Use a config with no token so needs_setup() returns true.
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123456"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let resp = public_router()
+            .with_state(state)
             .oneshot(
                 Request::builder()
                     .uri("/setup")
@@ -1038,6 +1065,22 @@ client_id = "123"
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn setup_page_redirects_when_already_configured() {
+        // test_app() has token = "test-token" → needs_setup() = false → redirect
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(resp.headers().get("location").unwrap(), "/dashboard");
     }
 
     #[tokio::test]
@@ -1113,7 +1156,18 @@ client_id = "123"
 
         let body = "botToken=mytoken&clientId=123456789012345678&clientSecret=&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fdiscord%2Fcallback&mongoUri=&sessionSecret=&adminIds=&guildId=&port=8080&presenceType=0&presenceText=Ready&commandScope=guild";
 
-        let resp = test_app()
+        // Use a setup-mode state (empty token) so the handler accepts the POST.
+        let setup_cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        let setup_state = Arc::new(state::AppState::new(setup_cfg, None));
+        let resp = public_router()
+            .with_state(setup_state)
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -1144,7 +1198,19 @@ client_id = "123"
 
     #[tokio::test]
     async fn setup_page_get_prepopulates_existing_config() {
-        let resp = test_app()
+        // Use a setup-mode state (empty token) so the wizard renders the form.
+        // The client_id "123456" should appear in the pre-filled form.
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123456"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let resp = public_router()
+            .with_state(state)
             .oneshot(
                 Request::builder()
                     .uri("/setup")
@@ -1256,7 +1322,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config/backup")
@@ -1290,7 +1356,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config/backup")
@@ -1345,7 +1411,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -1384,7 +1450,7 @@ client_id = "123"
         multipart_body.extend_from_slice(b"this is not a zip file");
         multipart_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
