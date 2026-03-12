@@ -1,53 +1,17 @@
 use axum::{
     body::Bytes,
-    extract::{ConnectInfo, Multipart, State},
+    extract::{Multipart, State},
     http::{header, StatusCode},
-    middleware::Next,
     response::{Html, IntoResponse, Json, Response},
     routing::get,
     Form, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 
 use crate::state::SharedState;
 use super::pages::{
     self, DashboardData, ErrorData, SelectorData, SetupData,
 };
-
-// ---------------------------------------------------------------------------
-// Security middleware
-// ---------------------------------------------------------------------------
-
-/// Reject any request that does not originate from a loopback address.
-///
-/// Applied to the `/api/config/backup` and `/api/config/restore` endpoints
-/// because they expose or overwrite `config.toml` (which contains the bot
-/// token and other secrets).
-///
-/// [`ConnectInfo`] is present in request extensions when the server is started
-/// with `into_make_service_with_connect_info`.  If it is absent (e.g. in unit
-/// tests that bypass the TCP layer) the check is skipped so tests continue to
-/// work without a real network connection.
-async fn require_loopback(request: axum::extract::Request, next: Next) -> Response {
-    let is_local = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip().is_loopback())
-        .unwrap_or(true); // no ConnectInfo → unit-test context, allow through
-
-    if is_local {
-        next.run(request).await
-    } else {
-        (
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": "This endpoint is only accessible from localhost"
-            })),
-        )
-            .into_response()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -757,9 +721,11 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 // Router
 // ---------------------------------------------------------------------------
 
-/// Build the Axum router.  State is attached in `dashboard::serve()` so this
-/// function only declares routes — keeping concerns separated.
-pub fn router() -> Router<SharedState> {
+/// Build the public Axum router (routes that do NOT require authentication).
+///
+/// The `/api/config/*` routes live in [`config_router`] and are composed with
+/// the admin auth middleware in `dashboard::serve()`.
+pub fn public_router() -> Router<SharedState> {
     use axum::routing::post;
     Router::new()
         // Static assets
@@ -776,27 +742,31 @@ pub fn router() -> Router<SharedState> {
         .route("/control/reload-commands", post(control_reload_commands))
         // Dashboard settings form
         .route("/dashboard/settings", post(dashboard_settings))
-        // Config backup / restore — both endpoints are restricted to loopback
-        // connections (`require_loopback` middleware) because they expose or
-        // overwrite `config.toml` which contains the bot token and secrets.
-        // The restore route additionally applies a 5 MB body limit to prevent
-        // memory exhaustion from large or malicious ZIP uploads.
-        .route(
-            "/api/config/backup",
-            get(config_backup)
-                .layer(axum::middleware::from_fn(require_loopback)),
-        )
-        .route(
-            "/api/config/restore",
-            post(config_restore)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024))
-                .layer(axum::middleware::from_fn(require_loopback)),
-        )
-        // JSON API
+        // Public JSON API (health + stats do not expose secrets)
         .route("/health", get(health))
         .route("/api/stats", get(stats))
-        .route("/api/config", get(public_config))
         .fallback(not_found)
+}
+
+/// Build the router for `/api/config/*` sub-routes.
+///
+/// These routes are nested under `/api/config` and wrapped with the
+/// `require_admin` middleware in `dashboard::serve()`.  The path prefixes here
+/// are **relative** to `/api/config` (e.g. `/backup` maps to `/api/config/backup`).
+pub fn config_router() -> Router<SharedState> {
+    use axum::routing::post;
+    Router::new()
+        // GET /api/config — returns public (non-secret) configuration fields
+        .route("/", get(public_config))
+        // GET /api/config/backup — download config.toml inside a ZIP
+        .route("/backup", get(config_backup))
+        // POST /api/config/restore — restore config.toml from an uploaded ZIP
+        // Apply a 5 MB body limit to prevent memory exhaustion from large uploads.
+        .route(
+            "/restore",
+            post(config_restore)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
 }
 
 #[cfg(test)]
@@ -835,7 +805,16 @@ port = 8080
     }
 
     fn test_app() -> axum::Router {
-        router().with_state(test_state())
+        public_router().with_state(test_state())
+    }
+
+    /// Full app including config routes (without auth middleware) for unit
+    /// testing the route handlers in isolation.
+    fn full_test_app() -> axum::Router {
+        let state = test_state();
+        public_router()
+            .nest("/api/config", config_router())
+            .with_state(state)
     }
 
     const TEST_MAX_BODY_SIZE: usize = 4 * 1024 * 1024;
@@ -917,7 +896,7 @@ client_id = "123"
         )
         .unwrap();
         let state = Arc::new(state::AppState::new(cfg, None));
-        let app = router().with_state(state);
+        let app = public_router().with_state(state);
 
         let resp = app
             .oneshot(
@@ -939,7 +918,7 @@ client_id = "123"
 
     #[tokio::test]
     async fn api_config_returns_200() {
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config")
@@ -953,7 +932,7 @@ client_id = "123"
 
     #[tokio::test]
     async fn api_config_fields() {
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config")
@@ -1000,7 +979,7 @@ client_id = "123"
         )
         .unwrap();
         let state = Arc::new(state::AppState::new(cfg, None));
-        let app = router().with_state(state);
+        let app = public_router().with_state(state);
 
         let resp = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -1256,7 +1235,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config/backup")
@@ -1290,7 +1269,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .uri("/api/config/backup")
@@ -1345,7 +1324,7 @@ client_id = "123"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -1384,7 +1363,7 @@ client_id = "123"
         multipart_body.extend_from_slice(b"this is not a zip file");
         multipart_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
 
-        let resp = test_app()
+        let resp = full_test_app()
             .oneshot(
                 Request::builder()
                     .method(Method::POST)

@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use mongodb::Client as MongoClient;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 
 use crate::config::Config;
 
@@ -14,11 +15,21 @@ pub struct AppState {
     /// The main entry point listens for this signal to stop the setup-mode
     /// dashboard and automatically start the bot.
     pub setup_complete: Notify,
+    /// Active dashboard sessions: session_id → Discord user ID.
+    pub sessions: Mutex<HashMap<String, String>>,
+    /// Pending OAuth2 CSRF states awaiting callback validation.
+    pub oauth_states: Mutex<HashMap<String, ()>>,
 }
 
 impl AppState {
     pub fn new(config: Config, db: Option<MongoClient>) -> Self {
-        Self { config, db, setup_complete: Notify::new() }
+        Self {
+            config,
+            db,
+            setup_complete: Notify::new(),
+            sessions: Mutex::new(HashMap::new()),
+            oauth_states: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Returns a reference to the MongoDB database, or `None` if no DB is configured.

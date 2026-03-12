@@ -1,10 +1,11 @@
+pub mod auth;
 pub mod pages;
 pub mod routes;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::Router;
+use axum::{routing::get, Router};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
@@ -12,36 +13,33 @@ use crate::state::SharedState;
 
 /// Spin up the optional Axum dashboard API.
 ///
-/// In **setup mode** (called from `main` before a bot token is configured) the
-/// server binds to `127.0.0.1` (loopback only) because the setup page and the
-/// backup/restore endpoints handle unencrypted bot tokens and config secrets.
-///
-/// In **normal mode** the server binds to `0.0.0.0` so it is reachable from
-/// the Docker host or a reverse-proxy.  The CORS layer restricts browser
-/// cross-origin access to localhost, but non-browser clients can still reach
-/// every endpoint.  If you expose the dashboard externally, place it behind an
-/// authenticating reverse proxy.
+/// The server always binds to `0.0.0.0:{port}` (required for Zeabur and other
+/// container environments).  The `/api/config/*` routes are protected by the
+/// `require_admin` middleware which enforces a valid Discord OAuth2 session
+/// belonging to `ADMIN_DISCORD_ID`.
 pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let port = state.config.dashboard.port;
 
-    // In setup mode the config is not yet complete, so no bot token is present.
-    // Bind to loopback only to prevent the unprotected setup wizard and the
-    // backup/restore endpoints from being reachable from non-local addresses.
-    let is_setup_mode = crate::config::needs_setup(&state.config);
-    let bind_addr = if is_setup_mode {
-        format!("127.0.0.1:{port}")
-    } else {
-        tracing::warn!(
-            "Dashboard is listening on all interfaces (0.0.0.0:{port}). \
-             The config backup/restore endpoints expose bot secrets. \
-             Place the dashboard behind an authenticating reverse proxy if it is publicly reachable."
-        );
-        format!("0.0.0.0:{port}")
-    };
+    // Always bind to all interfaces so the dashboard is reachable inside
+    // containers (Zeabur, Docker) and behind reverse proxies.
+    let bind_addr = format!("0.0.0.0:{port}");
+
+    // Build a protected sub-router for /api/config/* endpoints.
+    // The require_admin middleware validates the session cookie and ensures only
+    // the configured ADMIN_DISCORD_ID can reach these routes.
+    let config_routes = routes::config_router().route_layer(
+        axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_admin),
+    );
 
     let app = Router::new()
-        .merge(routes::router())
-        // Restrict CORS to localhost only for security
+        // Public routes (setup wizard, dashboard pages, health, control, etc.)
+        .merge(routes::public_router())
+        // Protected /api/config/* routes (backup, restore, public config view)
+        .nest("/api/config", config_routes)
+        // Discord OAuth2 flow
+        .route("/auth/login", get(auth::login))
+        .route("/auth/callback", get(auth::callback))
+        // Restrict CORS to localhost only for browser-based requests
         .layer(
             CorsLayer::new()
                 .allow_origin([
@@ -70,8 +68,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     };
 
     // `into_make_service_with_connect_info` injects `ConnectInfo<SocketAddr>`
-    // into each request's extensions so that the `require_loopback` middleware
-    // on the backup/restore routes can enforce localhost-only access.
+    // into each request's extensions (used by fallback handlers and tracing).
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
