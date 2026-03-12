@@ -204,6 +204,13 @@ pub async fn callback(
         }
     };
 
+    if !user_resp.status().is_success() {
+        let status = user_resp.status();
+        let body = user_resp.text().await.unwrap_or_default();
+        tracing::error!("Discord user profile request failed ({status}): {body}");
+        return (StatusCode::UNAUTHORIZED, "Discord rejected the access token while fetching user profile").into_response();
+    }
+
     let discord_user: DiscordUser = match user_resp.json().await {
         Ok(u) => u,
         Err(e) => {
@@ -248,7 +255,9 @@ pub async fn callback(
     tracing::info!("Admin {} ({}) logged in successfully", discord_user.username, discord_user.id);
 
     // HttpOnly prevents JS access; SameSite=Lax prevents most CSRF attacks.
-    let cookie = format!("session_id={session_id}; HttpOnly; Path=/; SameSite=Lax");
+    // Secure ensures the cookie is only sent over HTTPS (important when deployed
+    // behind a TLS-terminating reverse proxy such as Zeabur).
+    let cookie = format!("session_id={session_id}; HttpOnly; Secure; Path=/; SameSite=Lax");
     (
         StatusCode::FOUND,
         [
@@ -316,6 +325,17 @@ pub async fn require_admin(
 
     // Verify the admin ID.
     let admin_id = std::env::var("ADMIN_DISCORD_ID").unwrap_or_default();
+    if admin_id.is_empty() {
+        tracing::error!(
+            "ADMIN_DISCORD_ID is not set; cannot authorise session. \
+             Set the ADMIN_DISCORD_ID environment variable to your Discord user ID."
+        );
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Dashboard admin is not configured (ADMIN_DISCORD_ID is unset)"})),
+        )
+            .into_response();
+    }
     if user_id != admin_id {
         return (
             StatusCode::FORBIDDEN,

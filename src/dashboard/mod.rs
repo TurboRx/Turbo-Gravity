@@ -14,9 +14,9 @@ use crate::state::SharedState;
 /// Spin up the optional Axum dashboard API.
 ///
 /// The server always binds to `0.0.0.0:{port}` (required for Zeabur and other
-/// container environments).  The `/api/config/*` routes are protected by the
-/// `require_admin` middleware which enforces a valid Discord OAuth2 session
-/// belonging to `ADMIN_DISCORD_ID`.
+/// container environments).  The `/api/config/*` routes and `/dashboard/settings`
+/// are protected by the `require_admin` middleware which enforces a valid Discord
+/// OAuth2 session belonging to `ADMIN_DISCORD_ID`.
 pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let port = state.config.dashboard.port;
 
@@ -24,18 +24,23 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     // containers (Zeabur, Docker) and behind reverse proxies.
     let bind_addr = format!("0.0.0.0:{port}");
 
-    // Build a protected sub-router for /api/config/* endpoints.
+    // Build protected sub-routers.
     // The require_admin middleware validates the session cookie and ensures only
     // the configured ADMIN_DISCORD_ID can reach these routes.
-    let config_routes = routes::config_router().route_layer(
-        axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_admin),
-    );
+    let admin_guard = axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_admin);
+
+    let config_routes = routes::config_router()
+        .route_layer(admin_guard.clone());
+    let admin_routes = routes::admin_router()
+        .route_layer(admin_guard);
 
     let app = Router::new()
         // Public routes (setup wizard, dashboard pages, health, control, etc.)
         .merge(routes::public_router())
-        // Protected /api/config/* routes (backup, restore, public config view)
+        // Protected /api/config/* routes (backup, restore, config view)
         .nest("/api/config", config_routes)
+        // Protected admin routes (/dashboard/settings, etc.)
+        .merge(admin_routes)
         // Discord OAuth2 flow
         .route("/auth/login", get(auth::login))
         .route("/auth/callback", get(auth::callback))

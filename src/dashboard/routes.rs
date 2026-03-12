@@ -126,8 +126,17 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
     Html(pages::dashboard_page(&data))
 }
 
-/// GET /setup — first-run setup wizard page
-async fn setup_page(State(state): State<SharedState>) -> Html<String> {
+/// GET /setup — first-run setup wizard page.
+///
+/// Only renders the full form (including bot token and OAuth secrets) when the
+/// bot is not yet configured (`needs_setup` is true).  Once the bot is
+/// configured, visiting `/setup` redirects to `/dashboard` so that secrets are
+/// never exposed to unauthenticated users on a publicly-bound server.
+async fn setup_page(State(state): State<SharedState>) -> Response {
+    if !crate::config::needs_setup(&state.config) {
+        // Setup already complete — redirect away to avoid exposing secrets.
+        return (StatusCode::FOUND, [(header::LOCATION, "/dashboard")]).into_response();
+    }
     let data = SetupData {
         token: state.config.bot.token.clone(),
         owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
@@ -144,7 +153,7 @@ async fn setup_page(State(state): State<SharedState>) -> Html<String> {
         online_status: state.config.bot.online_status.clone(),
         avatar_url: state.config.bot.avatar_url.clone(),
     };
-    Html(pages::setup_page(&data))
+    Html(pages::setup_page(&data)).into_response()
 }
 
 /// GET /selector — guild selector page
@@ -216,6 +225,18 @@ fn default_port_str() -> String {
 /// `POST /setup` — save the wizard form to `config.toml` and show the setup-complete page.
 async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupForm>) -> Response {
     use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
+
+    // Only allow form submission during initial setup (before a bot token is configured).
+    // Once the bot is configured the endpoint is closed to prevent unauthenticated
+    // overwrites of config.toml from a publicly-accessible server.
+    if !crate::config::needs_setup(&state.config) {
+        let data = ErrorData {
+            code: 403,
+            title: "Forbidden".to_string(),
+            message: "Setup is already complete. Use the dashboard settings to modify configuration.".to_string(),
+        };
+        return (StatusCode::FORBIDDEN, Html(pages::error_page(&data))).into_response();
+    }
 
     // Validate port
     let port: u16 = match form.port.parse() {
@@ -726,8 +747,8 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 
 /// Build the public Axum router (routes that do NOT require authentication).
 ///
-/// The `/api/config/*` routes live in [`config_router`] and are composed with
-/// the admin auth middleware in `dashboard::serve()`.
+/// The `/api/config/*` routes and `/dashboard/settings` live in [`config_router`]
+/// and are composed with the admin auth middleware in `dashboard::serve()`.
 pub fn public_router() -> Router<SharedState> {
     use axum::routing::post;
     Router::new()
@@ -736,6 +757,9 @@ pub fn public_router() -> Router<SharedState> {
         // HTML pages
         .route("/", get(root))
         .route("/dashboard", get(dashboard_page))
+        // /setup is only usable during initial setup mode (no bot token configured).
+        // The handler itself redirects to /dashboard once setup is complete so
+        // that bot secrets are never exposed to unauthenticated visitors.
         .route("/setup", get(setup_page).post(setup_submit))
         .route("/selector", get(selector_page))
         // Dashboard quick-action controls (JSON responses)
@@ -749,15 +773,16 @@ pub fn public_router() -> Router<SharedState> {
         .fallback(not_found)
 }
 
-/// Build the router for `/api/config/*` sub-routes.
+/// Build the router for admin-only sub-routes.
 ///
-/// These routes are nested under `/api/config` and wrapped with the
-/// `require_admin` middleware in `dashboard::serve()`.  The path prefixes here
-/// are **relative** to `/api/config` (e.g. `/backup` maps to `/api/config/backup`).
+/// These routes are nested under `/api/config` and also include
+/// `/dashboard/settings`.  They are all wrapped with the `require_admin`
+/// middleware in `dashboard::serve()`.  The path prefixes here are **relative**
+/// to `/api/config` (e.g. `/backup` maps to `/api/config/backup`).
 pub fn config_router() -> Router<SharedState> {
     use axum::routing::post;
     Router::new()
-        // GET /api/config — returns public (non-secret) configuration fields
+        // GET /api/config — returns admin-only configuration fields
         .route("/", get(public_config))
         // GET /api/config/backup — download config.toml inside a ZIP
         .route("/backup", get(config_backup))
@@ -768,6 +793,17 @@ pub fn config_router() -> Router<SharedState> {
             post(config_restore)
                 .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
+}
+
+/// Build the admin-only router for dashboard management routes that are NOT
+/// nested under `/api/config` (e.g., `/dashboard/settings`).
+///
+/// Wrapped with `require_admin` middleware in `dashboard::serve()`.
+pub fn admin_router() -> Router<SharedState> {
+    use axum::routing::post;
+    Router::new()
+        // POST /dashboard/settings — persist presence/command scope to config.toml.
+        .route("/dashboard/settings", post(dashboard_settings))
 }
 
 #[cfg(test)]
@@ -1007,8 +1043,19 @@ client_id = "123"
     }
 
     #[tokio::test]
-    async fn setup_page_returns_html() {
-        let resp = test_app()
+    async fn setup_page_returns_html_in_setup_mode() {
+        // Use a config with no token so needs_setup() returns true.
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123456"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let resp = public_router()
+            .with_state(state)
             .oneshot(
                 Request::builder()
                     .uri("/setup")
@@ -1018,6 +1065,22 @@ client_id = "123"
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn setup_page_redirects_when_already_configured() {
+        // test_app() has token = "test-token" → needs_setup() = false → redirect
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(resp.headers().get("location").unwrap(), "/dashboard");
     }
 
     #[tokio::test]
@@ -1093,7 +1156,18 @@ client_id = "123"
 
         let body = "botToken=mytoken&clientId=123456789012345678&clientSecret=&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fdiscord%2Fcallback&mongoUri=&sessionSecret=&adminIds=&guildId=&port=8080&presenceType=0&presenceText=Ready&commandScope=guild";
 
-        let resp = test_app()
+        // Use a setup-mode state (empty token) so the handler accepts the POST.
+        let setup_cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        let setup_state = Arc::new(state::AppState::new(setup_cfg, None));
+        let resp = public_router()
+            .with_state(setup_state)
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -1124,7 +1198,19 @@ client_id = "123"
 
     #[tokio::test]
     async fn setup_page_get_prepopulates_existing_config() {
-        let resp = test_app()
+        // Use a setup-mode state (empty token) so the wizard renders the form.
+        // The client_id "123456" should appear in the pre-filled form.
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123456"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let resp = public_router()
+            .with_state(state)
             .oneshot(
                 Request::builder()
                     .uri("/setup")
