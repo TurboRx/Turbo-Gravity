@@ -165,10 +165,17 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Returns `true` when the bot token has not been set yet (first-run / setup mode).
+/// Returns `true` when the configuration is not yet sufficient to run the bot
+/// (first-run / setup mode). Currently this requires both a non-empty token and
+/// a non-empty, numeric client_id.
 /// Use this after `load()` to decide whether to start the setup wizard instead of the bot.
 pub fn needs_setup(cfg: &Config) -> bool {
-    cfg.bot.token.trim().is_empty()
+    let token_empty = cfg.bot.token.trim().is_empty();
+    let client_id_str = cfg.bot.client_id.trim();
+
+    let client_id_invalid = client_id_str.is_empty() || client_id_str.parse::<u64>().is_err();
+
+    token_empty || client_id_invalid
 }
 
 /// Load `config.toml` from the current working directory.
