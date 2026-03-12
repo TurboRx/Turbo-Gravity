@@ -22,7 +22,7 @@ serenity = { version = "0.12", default-features = false, features = [
 tokio = { version = "1", features = ["full"] }
 
 # Web framework for optional dashboard
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
@@ -43,6 +43,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"

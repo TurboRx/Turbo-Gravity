@@ -706,6 +706,29 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.infotip-wrap.open').forEach(function(w) { w.classList.remove('open'); });
   });
 });
+
+/* ── Config restore upload handler ─────────────────────────────────────── */
+function restoreConfig(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  var statusEl = document.getElementById('restore-status');
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Uploading…'; }
+  var formData = new FormData();
+  formData.append('file', file);
+  fetch('/api/config/restore', { method: 'POST', body: formData })
+    .then(function(r) { return r.json().catch(function() { return { success: r.ok, message: r.ok ? 'Restored.' : 'Request failed.' }; }); })
+    .then(function(d) {
+      var success = (typeof d.success === 'boolean') ? d.success : false;
+      var message = d.message || d.error || (success ? 'Restored.' : 'Failed.');
+      if (statusEl) { statusEl.textContent = message; }
+      showToast(message || (success ? 'Configuration restored!' : 'Restore failed.'), success ? 'success' : 'error');
+    })
+    .catch(function(e) {
+      if (statusEl) { statusEl.textContent = 'Network error: ' + e.message; }
+      showToast('Network error: ' + e.message, 'error');
+    })
+    .finally(function() { input.value = ''; });
+}
 </script>"#;
 
 // ---------------------------------------------------------------------------
@@ -994,10 +1017,10 @@ pub fn dashboard_page(data: &DashboardData) -> String {
             <div class="setup-field">
               <label>Online Status</label>
               <select class="form-select" name="onlineStatus" style="width:100%">
-                <option value="online"{ps_online}>&#x1F7E2; Online</option>
-                <option value="idle"{ps_idle}>&#x1F7E1; Idle</option>
-                <option value="dnd"{ps_dnd}>&#x1F534; Do Not Disturb</option>
-                <option value="invisible"{ps_invisible}>&#x26AA; Invisible</option>
+                <option value="online"{ps_online}>Online</option>
+                <option value="idle"{ps_idle}>Idle</option>
+                <option value="dnd"{ps_dnd}>Do Not Disturb</option>
+                <option value="invisible"{ps_invisible}>Invisible</option>
               </select>
             </div>
             <div class="setup-field">
@@ -1123,6 +1146,28 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           </div>
 
         </div>
+      </div>
+
+      <!-- Configuration Backup / Restore -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">backup</span> Configuration Backup</span>
+        </div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          Download the current <code>config.toml</code> as a ZIP archive or
+          restore a previously downloaded backup.
+        </p>
+        <div class="btn-actions" style="flex-wrap:wrap;gap:10px">
+          <a class="btn btn-primary" href="/api/config/backup" download="config-backup.zip">
+            <span class="material-symbols-rounded mi-btn">download</span> Download Backup
+          </a>
+          <label class="btn btn-ghost" style="cursor:pointer">
+            <span class="material-symbols-rounded mi-btn">upload</span> Restore Backup
+            <input type="file" accept=".zip" style="display:none" id="restore-file-input"
+              onchange="restoreConfig(this)" />
+          </label>
+        </div>
+        <p id="restore-status" style="font-size:12px;color:var(--text2);margin-top:10px;display:none"></p>
       </div>
 
     </div><!-- /col-right -->
@@ -1344,10 +1389,10 @@ pub fn setup_page(data: &SetupData) -> String {
           <div class="setup-field">
             <label>Online Status</label>
             <select name="onlineStatus">
-              <option value="online"{ps_online}>&#x1F7E2; Online</option>
-              <option value="idle"{ps_idle}>&#x1F7E1; Idle</option>
-              <option value="dnd"{ps_dnd}>&#x1F534; Do Not Disturb</option>
-              <option value="invisible"{ps_invisible}>&#x26AA; Invisible</option>
+              <option value="online"{ps_online}>Online</option>
+              <option value="idle"{ps_idle}>Idle</option>
+              <option value="dnd"{ps_dnd}>Do Not Disturb</option>
+              <option value="invisible"{ps_invisible}>Invisible</option>
             </select>
           </div>
           <div class="setup-field">
@@ -1505,7 +1550,7 @@ pub fn selector_page(data: &SelectorData) -> String {
 // ---------------------------------------------------------------------------
 
 /// Rendered after a successful `POST /setup` submission.
-/// Tells the user to restart the bot to connect to Discord.
+/// The bot starts automatically — no manual restart is required.
 pub fn setup_complete_page() -> String {
     let head = html_head("Setup Complete", "");
     let foot = html_foot();
@@ -1523,12 +1568,12 @@ pub fn setup_complete_page() -> String {
     <div class="setup-section">
       <div class="setup-section-header">
         <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">rocket_launch</span></span>
-        <span class="setup-section-title">Start the Bot</span>
+        <span class="setup-section-title">Bot is Starting&hellip;</span>
       </div>
       <p style="color:var(--text2);margin-bottom:14px">
-        Restart the bot to connect it to Discord. In your terminal, run:
+        The bot is connecting to Discord automatically. The dashboard will be
+        available at the configured port once the bot is online.
       </p>
-      <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:13px;overflow-x:auto">cargo run --release</pre>
     </div>
 
     <div style="margin-top:28px;display:flex;gap:12px;justify-content:center">

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use mongodb::Client as MongoClient;
+use tokio::sync::Notify;
 
 use crate::config::Config;
 
@@ -9,11 +10,15 @@ use crate::config::Config;
 pub struct AppState {
     pub config: Config,
     pub db: Option<MongoClient>,
+    /// Notified when the setup wizard successfully saves a configuration.
+    /// The main entry point listens for this signal to stop the setup-mode
+    /// dashboard and automatically start the bot.
+    pub setup_complete: Notify,
 }
 
 impl AppState {
     pub fn new(config: Config, db: Option<MongoClient>) -> Self {
-        Self { config, db }
+        Self { config, db, setup_complete: Notify::new() }
     }
 
     /// Returns a reference to the MongoDB database, or `None` if no DB is configured.
