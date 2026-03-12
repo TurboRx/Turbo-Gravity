@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load config.toml (or a default unconfigured config if the file is absent).
     // Validation is deferred until we know the bot is actually configured.
-    let cfg = config::load()?;
+    let mut cfg = config::load()?;
 
     // -- Setup mode -----------------------------------------------------------
     // If the bot is not yet fully configured (fresh clone / first run), skip
@@ -41,7 +41,6 @@ async fn main() -> anyhow::Result<()> {
             "Open http://127.0.0.1:{}/setup in your browser to configure the bot.",
             setup_port
         );
-        info!("Once you save the configuration, restart the bot to connect to Discord.");
 
         // Build a state with the (possibly corrected) port so the server binds correctly.
         let mut setup_cfg = cfg.clone();
@@ -54,12 +53,21 @@ async fn main() -> anyhow::Result<()> {
         );
 
         // In setup mode, the dashboard is the only active component.
-        // Run it in the foreground so that startup failures propagate
-        // instead of leaving the process hanging while waiting for a
-        // shutdown signal.
+        // It will shut down automatically once the user saves the configuration
+        // (signalled via `AppState::setup_complete`).
         dashboard::serve(state).await?;
-        info!("Shutting down setup wizard. Run the bot again after saving your configuration.");
-        return Ok(());
+
+        // Re-load the config that was just saved by the wizard.
+        let new_cfg = config::load()?;
+        if config::needs_setup(&new_cfg) {
+            // The wizard was dismissed without completing setup (e.g. server
+            // process was interrupted before the form was submitted).
+            info!("Setup not completed. Exiting. Run the bot again to re-enter setup mode.");
+            return Ok(());
+        }
+
+        info!("Setup complete — starting the bot automatically…");
+        cfg = new_cfg;
     }
     // -------------------------------------------------------------------------
 

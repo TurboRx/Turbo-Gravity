@@ -1,5 +1,6 @@
 use axum::{
-    extract::State,
+    body::Bytes,
+    extract::{Multipart, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Json, Response},
     routing::get,
@@ -210,7 +211,7 @@ fn default_port_str() -> String {
 }
 
 /// `POST /setup` — save the wizard form to `config.toml` and show the setup-complete page.
-async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
+async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupForm>) -> Response {
     use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
 
     // Validate port
@@ -347,7 +348,12 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
     };
 
     match crate::config::save(&cfg) {
-        Ok(()) => Html(pages::setup_complete_page()).into_response(),
+        Ok(()) => {
+            // Signal the setup-mode dashboard to shut down so that main can
+            // automatically start the bot without any manual intervention.
+            state.setup_complete.notify_one();
+            Html(pages::setup_complete_page()).into_response()
+        },
         Err(e) => {
             let data = ErrorData {
                 code: 500,
@@ -469,6 +475,245 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
 }
 
 // ---------------------------------------------------------------------------
+// Config backup / restore
+// ---------------------------------------------------------------------------
+
+/// GET /api/config/backup — download `config.toml` packaged inside a ZIP file.
+async fn config_backup() -> Response {
+    let config_path = std::path::Path::new("config.toml");
+
+    let toml_bytes = match std::fs::read(config_path) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("config_backup: failed to read config.toml: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"Could not read configuration file\"}",
+            )
+                .into_response();
+        }
+    };
+
+    // Build the ZIP archive in memory
+    let mut zip_buf: Vec<u8> = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut zip_buf);
+        let mut zip = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        if let Err(e) = zip.start_file("config.toml", options) {
+            tracing::error!("config_backup: failed to create ZIP entry: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"Could not create backup archive\"}",
+            )
+                .into_response();
+        }
+        use std::io::Write;
+        if let Err(e) = zip.write_all(&toml_bytes) {
+            tracing::error!("config_backup: failed to write ZIP data: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"Could not write backup archive\"}",
+            )
+                .into_response();
+        }
+        if let Err(e) = zip.finish() {
+            tracing::error!("config_backup: failed to finalise ZIP: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"Could not finalise backup archive\"}",
+            )
+                .into_response();
+        }
+    }
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/zip"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"config-backup.zip\"",
+            ),
+        ],
+        Bytes::from(zip_buf),
+    )
+        .into_response()
+}
+
+/// POST /api/config/restore — accept a multipart upload containing a ZIP file
+/// with `config.toml` inside and restore it.
+async fn config_restore(mut multipart: Multipart) -> Response {
+    // Extract the field named "file" from the multipart form.
+    let mut zip_data: Option<Vec<u8>> = None;
+    loop {
+        match multipart.next_field().await {
+            Ok(Some(field)) => {
+                let name = field.name().unwrap_or("").to_string();
+                if name == "file" {
+                    match field.bytes().await {
+                        Ok(b) => {
+                            zip_data = Some(b.to_vec());
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::warn!("config_restore: failed to read upload field: {e}");
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                [(header::CONTENT_TYPE, "application/json")],
+                                "{\"error\":\"Failed to read the uploaded file\"}",
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+                // Skip fields that are not "file"
+            }
+            Ok(None) => break,
+            Err(e) => {
+                tracing::warn!("config_restore: multipart parsing error: {e}");
+                return (
+                    StatusCode::BAD_REQUEST,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    "{\"error\":\"Invalid multipart upload\"}",
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let zip_bytes = match zip_data {
+        Some(b) => b,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"No file field found in the upload\"}",
+            )
+                .into_response();
+        }
+    };
+
+    // Open the ZIP and extract config.toml
+    let cursor = std::io::Cursor::new(zip_bytes);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!("config_restore: invalid ZIP file: {e}");
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"The uploaded file is not a valid ZIP archive\"}",
+            )
+                .into_response();
+        }
+    };
+
+    // Find config.toml — case-insensitive, but reject any path that contains
+    // directory-traversal sequences to prevent zip-slip attacks.
+    let entry_index = (0..archive.len()).find(|&i| {
+        archive
+            .by_index(i)
+            .map(|f| {
+                let name = f.name().to_lowercase();
+                // Reject entries with traversal components
+                if name.contains("..") {
+                    return false;
+                }
+                name == "config.toml"
+                    || name.ends_with("/config.toml")
+                    || name.ends_with("\\config.toml")
+            })
+            .unwrap_or(false)
+    });
+
+    let entry_index = match entry_index {
+        Some(i) => i,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"No config.toml found in the ZIP archive\"}",
+            )
+                .into_response();
+        }
+    };
+
+    let toml_content = {
+        use std::io::Read;
+        let mut entry = match archive.by_index(entry_index) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::error!("config_restore: failed to read ZIP entry: {e}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    "{\"error\":\"Could not read the configuration entry from the archive\"}",
+                )
+                    .into_response();
+            }
+        };
+        let mut buf = Vec::new();
+        if let Err(e) = entry.read_to_end(&mut buf) {
+            tracing::error!("config_restore: failed to read config.toml from ZIP: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"Could not read the configuration entry from the archive\"}",
+            )
+                .into_response();
+        }
+        buf
+    };
+
+    // Validate the TOML before writing
+    let toml_str = match std::str::from_utf8(&toml_content) {
+        Ok(s) => s,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, "application/json")],
+                "{\"error\":\"The config.toml in the archive is not valid UTF-8\"}",
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = toml::from_str::<toml::Table>(toml_str) {
+        let body = format!("{{\"error\":\"The config.toml in the archive is not valid TOML: {e}\"}}");
+        return (
+            StatusCode::BAD_REQUEST,
+            [(header::CONTENT_TYPE, "application/json")],
+            body,
+        )
+            .into_response();
+    }
+
+    // Write restored config
+    if let Err(e) = std::fs::write("config.toml", &toml_content) {
+        tracing::error!("config_restore: failed to write config.toml: {e}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{\"error\":\"Could not write the restored configuration to disk\"}",
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        "{\"success\":true,\"message\":\"Configuration restored successfully. Restart the bot to apply the new settings.\"}",
+    )
+        .into_response()
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -491,6 +736,9 @@ pub fn router() -> Router<SharedState> {
         .route("/control/reload-commands", post(control_reload_commands))
         // Dashboard settings form
         .route("/dashboard/settings", post(dashboard_settings))
+        // Config backup / restore
+        .route("/api/config/backup",  get(config_backup))
+        .route("/api/config/restore", post(config_restore))
         // JSON API
         .route("/health", get(health))
         .route("/api/stats", get(stats))
@@ -501,7 +749,7 @@ pub fn router() -> Router<SharedState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use axum::{
         body::{self, Body},
@@ -510,6 +758,11 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::{config, state};
+
+    /// Global mutex serialising tests that mutate the process working directory.
+    /// `std::env::set_current_dir` is not thread-safe across tests that run in
+    /// parallel; holding this lock prevents races in filesystem-dependent tests.
+    static CWD_LOCK: Mutex<()> = Mutex::new(());
 
     fn test_state() -> state::SharedState {
         let cfg: config::Config = toml::from_str(
@@ -799,7 +1052,9 @@ client_id = "123"
         let config_path = temp_dir.path().join("config.toml");
         std::fs::write(&config_path, "").unwrap();
 
-        // Change working directory to temp_dir so config::save writes there
+        // Serialise CWD mutation: hold the lock for the full duration of the
+        // filesystem-sensitive section (CWD change + request + restore).
+        let _cwd_guard = CWD_LOCK.lock().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -824,7 +1079,7 @@ client_id = "123"
         assert_eq!(resp.status(), StatusCode::OK);
         let text = body_string(resp.into_body()).await;
         assert!(
-            text.contains("Setup Complete") || text.contains("cargo run"),
+            text.contains("Setup Complete") || text.contains("Bot is Starting"),
             "expected setup-complete page content, got: {text}"
         );
 
@@ -929,5 +1184,168 @@ client_id = "123"
         let text = body_string(resp.into_body()).await;
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v["success"], true);
+    }
+
+    // ------------------------------------------------------------------
+    // GET /api/config/backup
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn config_backup_returns_zip_when_config_exists() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp_dir.path().join("config.toml"),
+            "[bot]\ntoken = \"t\"\nclient_id = \"1\"\n",
+        )
+        .unwrap();
+
+        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config/backup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        std::env::set_current_dir(&original_dir).unwrap();
+        drop(_cwd_guard);
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("application/zip"), "expected zip, got {ct}");
+        let cd = resp
+            .headers()
+            .get("content-disposition")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(cd.contains("config-backup.zip"), "unexpected disposition: {cd}");
+    }
+
+    #[tokio::test]
+    async fn config_backup_fails_when_no_config_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        // Deliberately do NOT create config.toml
+
+        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/config/backup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        std::env::set_current_dir(&original_dir).unwrap();
+        drop(_cwd_guard);
+
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // ------------------------------------------------------------------
+    // POST /api/config/restore
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn config_restore_restores_config_from_zip() {
+        use axum::http::Method;
+        use std::io::Write;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        // Pre-create an empty config.toml so the directory is writable
+        std::fs::write(temp_dir.path().join("config.toml"), "").unwrap();
+
+        // Build a valid ZIP containing config.toml
+        let toml_content = "[bot]\ntoken = \"restored\"\nclient_id = \"42\"\n";
+        let mut zip_buf: Vec<u8> = Vec::new();
+        {
+            let cursor = std::io::Cursor::new(&mut zip_buf);
+            let mut zip = zip::ZipWriter::new(cursor);
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("config.toml", opts).unwrap();
+            zip.write_all(toml_content.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+
+        // Build a multipart body manually
+        let boundary = "testboundary123";
+        let mut multipart_body: Vec<u8> = Vec::new();
+        multipart_body.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"config-backup.zip\"\r\nContent-Type: application/zip\r\n\r\n").as_bytes()
+        );
+        multipart_body.extend_from_slice(&zip_buf);
+        multipart_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/config/restore")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(multipart_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let written = std::fs::read_to_string(temp_dir.path().join("config.toml")).unwrap();
+        std::env::set_current_dir(&original_dir).unwrap();
+        drop(_cwd_guard);
+
+        let status = resp.status();
+        let text = body_string(resp.into_body()).await;
+        assert_eq!(status, StatusCode::OK, "response body: {text}");
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["success"], true, "response: {text}");
+        assert!(written.contains("restored"), "config not written: {written}");
+    }
+
+    #[tokio::test]
+    async fn config_restore_rejects_invalid_zip() {
+        use axum::http::Method;
+
+        let boundary = "testboundary456";
+        let mut multipart_body: Vec<u8> = Vec::new();
+        multipart_body.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bad.zip\"\r\nContent-Type: application/zip\r\n\r\n").as_bytes()
+        );
+        multipart_body.extend_from_slice(b"this is not a zip file");
+        multipart_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/config/restore")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(multipart_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }

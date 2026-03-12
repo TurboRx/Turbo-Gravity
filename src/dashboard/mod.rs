@@ -38,6 +38,17 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     info!("Dashboard listening on http://0.0.0.0:{port}");
 
-    axum::serve(listener, app).await?;
+    // When the setup wizard successfully saves a configuration it calls
+    // `state.setup_complete.notify_one()`.  We use Axum's graceful-shutdown
+    // hook to stop the server at that point so that `main` can re-read the
+    // freshly written config and start the bot automatically.
+    let shutdown = {
+        let state = Arc::clone(&state);
+        async move { state.setup_complete.notified().await }
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await?;
     Ok(())
 }
