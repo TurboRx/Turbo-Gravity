@@ -1,9 +1,10 @@
 pub mod pages;
 pub mod routes;
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::{Router};
+use axum::Router;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
@@ -68,8 +69,14 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
         async move { state.setup_complete.notified().await }
     };
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await?;
+    // `into_make_service_with_connect_info` injects `ConnectInfo<SocketAddr>`
+    // into each request's extensions so that the `require_loopback` middleware
+    // on the backup/restore routes can enforce localhost-only access.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await?;
     Ok(())
 }

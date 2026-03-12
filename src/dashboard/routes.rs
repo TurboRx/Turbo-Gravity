@@ -1,17 +1,53 @@
 use axum::{
     body::Bytes,
-    extract::{Multipart, State},
+    extract::{ConnectInfo, Multipart, State},
     http::{header, StatusCode},
+    middleware::Next,
     response::{Html, IntoResponse, Json, Response},
     routing::get,
     Form, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 use crate::state::SharedState;
 use super::pages::{
     self, DashboardData, ErrorData, SelectorData, SetupData,
 };
+
+// ---------------------------------------------------------------------------
+// Security middleware
+// ---------------------------------------------------------------------------
+
+/// Reject any request that does not originate from a loopback address.
+///
+/// Applied to the `/api/config/backup` and `/api/config/restore` endpoints
+/// because they expose or overwrite `config.toml` (which contains the bot
+/// token and other secrets).
+///
+/// [`ConnectInfo`] is present in request extensions when the server is started
+/// with `into_make_service_with_connect_info`.  If it is absent (e.g. in unit
+/// tests that bypass the TCP layer) the check is skipped so tests continue to
+/// work without a real network connection.
+async fn require_loopback(request: axum::extract::Request, next: Next) -> Response {
+    let is_local = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(addr)| addr.ip().is_loopback())
+        .unwrap_or(true); // no ConnectInfo → unit-test context, allow through
+
+    if is_local {
+        next.run(request).await
+    } else {
+        (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "This endpoint is only accessible from localhost"
+            })),
+        )
+            .into_response()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -639,10 +675,26 @@ async fn config_restore(mut multipart: Multipart) -> Response {
             }
 
             let mut buf = Vec::with_capacity(entry.size() as usize);
-            entry.read_to_end(&mut buf).map_err(|e| {
-                tracing::error!("config_restore: failed to decompress config.toml: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
-            })?;
+            // Wrap the entry in `take(MAX+1)` to enforce a hard byte cap
+            // during decompression regardless of the declared uncompressed
+            // size, which can be missing or deliberately falsified in a
+            // crafted ZIP (zip-bomb protection).
+            let bytes_read = entry
+                .take(MAX_CONFIG_UNCOMPRESSED_BYTES + 1)
+                .read_to_end(&mut buf)
+                .map_err(|e| {
+                    tracing::error!("config_restore: failed to decompress config.toml: {e}");
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
+                })?;
+            if bytes_read as u64 > MAX_CONFIG_UNCOMPRESSED_BYTES {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "config.toml exceeds the maximum allowed size of {} bytes",
+                        MAX_CONFIG_UNCOMPRESSED_BYTES
+                    ),
+                ));
+            }
             buf
         };
 
@@ -651,9 +703,15 @@ async fn config_restore(mut multipart: Multipart) -> Response {
             (StatusCode::BAD_REQUEST, "The config.toml in the archive is not valid UTF-8".to_string())
         })?;
 
-        // Validate TOML — use structured error so message is safe to return
-        toml::from_str::<toml::Table>(toml_str).map_err(|e| {
+        // Parse the TOML as the concrete Config type and run full semantic
+        // validation so that a syntactically-valid but semantically-broken
+        // config (missing token, bad presence_type, etc.) is rejected before
+        // being written to disk, preventing broken startups.
+        let restored_cfg = toml::from_str::<crate::config::Config>(toml_str).map_err(|e| {
             (StatusCode::BAD_REQUEST, format!("The config.toml in the archive is not valid TOML: {e}"))
+        })?;
+        crate::config::validate(&restored_cfg).map_err(|e| {
+            (StatusCode::BAD_REQUEST, format!("The config.toml in the archive contains invalid settings: {e}"))
         })?;
 
         Ok(toml_content)
@@ -718,13 +776,21 @@ pub fn router() -> Router<SharedState> {
         .route("/control/reload-commands", post(control_reload_commands))
         // Dashboard settings form
         .route("/dashboard/settings", post(dashboard_settings))
-        // Config backup / restore — restore has a 5 MB body limit to prevent
+        // Config backup / restore — both endpoints are restricted to loopback
+        // connections (`require_loopback` middleware) because they expose or
+        // overwrite `config.toml` which contains the bot token and secrets.
+        // The restore route additionally applies a 5 MB body limit to prevent
         // memory exhaustion from large or malicious ZIP uploads.
-        .route("/api/config/backup",  get(config_backup))
+        .route(
+            "/api/config/backup",
+            get(config_backup)
+                .layer(axum::middleware::from_fn(require_loopback)),
+        )
         .route(
             "/api/config/restore",
             post(config_restore)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024))
+                .layer(axum::middleware::from_fn(require_loopback)),
         )
         // JSON API
         .route("/health", get(health))
