@@ -38,19 +38,19 @@ async fn main() -> anyhow::Result<()> {
 
         let state = Arc::new(state::AppState::new(cfg.clone(), None));
         let dashboard_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            if let Err(e) = dashboard::serve(dashboard_state).await {
-                tracing::error!("Setup dashboard error: {e}");
-            }
-        });
         info!(
             "Setup dashboard listening on http://0.0.0.0:{}",
             cfg.dashboard.port
         );
 
-        shutdown_signal().await;
+        // In setup mode, the dashboard is the only active component.
+        // Run it in the foreground so that startup failures propagate
+        // instead of leaving the process hanging while waiting for a
+        // shutdown signal.
+        dashboard::serve(dashboard_state).await?;
         info!("Shutting down setup wizard. Run the bot again after saving your configuration.");
         return Ok(());
+    }
     }
     // -------------------------------------------------------------------------
 
