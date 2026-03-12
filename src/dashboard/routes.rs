@@ -480,74 +480,64 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
 
 /// GET /api/config/backup — download `config.toml` packaged inside a ZIP file.
 async fn config_backup() -> Response {
-    let config_path = std::path::Path::new("config.toml");
+    // Perform all blocking filesystem and CPU-heavy ZIP work on a dedicated
+    // thread so we don't stall the async runtime.
+    let result = tokio::task::spawn_blocking(|| -> Result<Vec<u8>, String> {
+        let toml_bytes = std::fs::read("config.toml")
+            .map_err(|e| { tracing::error!("config_backup: failed to read config.toml: {e}"); "Could not read configuration file".to_string() })?;
 
-    let toml_bytes = match std::fs::read(config_path) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::error!("config_backup: failed to read config.toml: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"Could not read configuration file\"}",
-            )
-                .into_response();
-        }
-    };
-
-    // Build the ZIP archive in memory
-    let mut zip_buf: Vec<u8> = Vec::new();
-    {
+        let mut zip_buf: Vec<u8> = Vec::new();
         let cursor = std::io::Cursor::new(&mut zip_buf);
         let mut zip = zip::ZipWriter::new(cursor);
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
-        if let Err(e) = zip.start_file("config.toml", options) {
-            tracing::error!("config_backup: failed to create ZIP entry: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"Could not create backup archive\"}",
-            )
-                .into_response();
-        }
+        zip.start_file("config.toml", options)
+            .map_err(|e| { tracing::error!("config_backup: failed to create ZIP entry: {e}"); "Could not create backup archive".to_string() })?;
         use std::io::Write;
-        if let Err(e) = zip.write_all(&toml_bytes) {
-            tracing::error!("config_backup: failed to write ZIP data: {e}");
-            return (
+        zip.write_all(&toml_bytes)
+            .map_err(|e| { tracing::error!("config_backup: failed to write ZIP data: {e}"); "Could not write backup archive".to_string() })?;
+        zip.finish()
+            .map_err(|e| { tracing::error!("config_backup: failed to finalise ZIP: {e}"); "Could not finalise backup archive".to_string() })?;
+        Ok(zip_buf)
+    }).await;
+
+    match result {
+        Ok(Ok(zip_buf)) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "application/zip"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=\"config-backup.zip\"",
+                ),
+            ],
+            Bytes::from(zip_buf),
+        )
+            .into_response(),
+        Ok(Err(msg)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": msg })),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("config_backup: spawn_blocking panicked: {e}");
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"Could not write backup archive\"}",
+                Json(serde_json::json!({ "error": "Internal error during backup" })),
             )
-                .into_response();
-        }
-        if let Err(e) = zip.finish() {
-            tracing::error!("config_backup: failed to finalise ZIP: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"Could not finalise backup archive\"}",
-            )
-                .into_response();
+                .into_response()
         }
     }
-
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "application/zip"),
-            (
-                header::CONTENT_DISPOSITION,
-                "attachment; filename=\"config-backup.zip\"",
-            ),
-        ],
-        Bytes::from(zip_buf),
-    )
-        .into_response()
 }
+
+/// Maximum uncompressed size of config.toml accepted during restore (1 MB).
+const MAX_CONFIG_UNCOMPRESSED_BYTES: u64 = 1024 * 1024;
 
 /// POST /api/config/restore — accept a multipart upload containing a ZIP file
 /// with `config.toml` inside and restore it.
+///
+/// The route definition applies a 5 MB request body limit to prevent memory
+/// exhaustion from large or malicious uploads.
 async fn config_restore(mut multipart: Multipart) -> Response {
     // Extract the field named "file" from the multipart form.
     let mut zip_data: Option<Vec<u8>> = None;
@@ -565,8 +555,7 @@ async fn config_restore(mut multipart: Multipart) -> Response {
                             tracing::warn!("config_restore: failed to read upload field: {e}");
                             return (
                                 StatusCode::BAD_REQUEST,
-                                [(header::CONTENT_TYPE, "application/json")],
-                                "{\"error\":\"Failed to read the uploaded file\"}",
+                                Json(serde_json::json!({ "error": "Failed to read the uploaded file" })),
                             )
                                 .into_response();
                         }
@@ -579,8 +568,7 @@ async fn config_restore(mut multipart: Multipart) -> Response {
                 tracing::warn!("config_restore: multipart parsing error: {e}");
                 return (
                     StatusCode::BAD_REQUEST,
-                    [(header::CONTENT_TYPE, "application/json")],
-                    "{\"error\":\"Invalid multipart upload\"}",
+                    Json(serde_json::json!({ "error": "Invalid multipart upload" })),
                 )
                     .into_response();
             }
@@ -592,125 +580,119 @@ async fn config_restore(mut multipart: Multipart) -> Response {
         None => {
             return (
                 StatusCode::BAD_REQUEST,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"No file field found in the upload\"}",
+                Json(serde_json::json!({ "error": "No file field found in the upload" })),
             )
                 .into_response();
         }
     };
 
-    // Open the ZIP and extract config.toml
-    let cursor = std::io::Cursor::new(zip_bytes);
-    let mut archive = match zip::ZipArchive::new(cursor) {
-        Ok(a) => a,
-        Err(e) => {
+    // Perform all blocking ZIP parsing and filesystem work on a dedicated
+    // thread to avoid stalling the async runtime.
+    let result = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, (StatusCode, String)> {
+        // Open the ZIP and extract config.toml
+        let cursor = std::io::Cursor::new(zip_bytes);
+        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| {
             tracing::warn!("config_restore: invalid ZIP file: {e}");
-            return (
-                StatusCode::BAD_REQUEST,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"The uploaded file is not a valid ZIP archive\"}",
-            )
-                .into_response();
-        }
-    };
+            (StatusCode::BAD_REQUEST, "The uploaded file is not a valid ZIP archive".to_string())
+        })?;
 
-    // Find config.toml — case-insensitive, but reject any path that contains
-    // directory-traversal sequences to prevent zip-slip attacks.
-    let entry_index = (0..archive.len()).find(|&i| {
-        archive
-            .by_index(i)
-            .map(|f| {
-                let name = f.name().to_lowercase();
-                // Reject entries with traversal components
-                if name.contains("..") {
-                    return false;
-                }
-                name == "config.toml"
-                    || name.ends_with("/config.toml")
-                    || name.ends_with("\\config.toml")
-            })
-            .unwrap_or(false)
-    });
+        // Find config.toml — case-insensitive, but reject any path that contains
+        // directory-traversal sequences to prevent zip-slip attacks.
+        let entry_index = (0..archive.len()).find(|&i| {
+            archive
+                .by_index(i)
+                .map(|f| {
+                    let name = f.name().to_lowercase();
+                    // Reject entries with traversal components
+                    if name.contains("..") {
+                        return false;
+                    }
+                    name == "config.toml"
+                        || name.ends_with("/config.toml")
+                        || name.ends_with("\\config.toml")
+                })
+                .unwrap_or(false)
+        });
 
-    let entry_index = match entry_index {
-        Some(i) => i,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"No config.toml found in the ZIP archive\"}",
-            )
-                .into_response();
-        }
-    };
+        let entry_index = entry_index.ok_or_else(|| {
+            (StatusCode::BAD_REQUEST, "No config.toml found in the ZIP archive".to_string())
+        })?;
 
-    let toml_content = {
-        use std::io::Read;
-        let mut entry = match archive.by_index(entry_index) {
-            Ok(e) => e,
-            Err(e) => {
-                tracing::error!("config_restore: failed to read ZIP entry: {e}");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    [(header::CONTENT_TYPE, "application/json")],
-                    "{\"error\":\"Could not read the configuration entry from the archive\"}",
-                )
-                    .into_response();
+        let toml_content = {
+            use std::io::Read;
+            let mut entry = archive.by_index(entry_index).map_err(|e| {
+                tracing::error!("config_restore: failed to open ZIP entry: {e}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
+            })?;
+
+            // Guard against zip bombs: reject entries whose declared
+            // uncompressed size exceeds the threshold.
+            if entry.size() > MAX_CONFIG_UNCOMPRESSED_BYTES {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "config.toml is too large ({} bytes; max {} bytes)",
+                        entry.size(),
+                        MAX_CONFIG_UNCOMPRESSED_BYTES
+                    ),
+                ));
             }
+
+            let mut buf = Vec::with_capacity(entry.size() as usize);
+            entry.read_to_end(&mut buf).map_err(|e| {
+                tracing::error!("config_restore: failed to decompress config.toml: {e}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
+            })?;
+            buf
         };
-        let mut buf = Vec::new();
-        if let Err(e) = entry.read_to_end(&mut buf) {
-            tracing::error!("config_restore: failed to read config.toml from ZIP: {e}");
-            return (
+
+        // Validate UTF-8
+        let toml_str = std::str::from_utf8(&toml_content).map_err(|_| {
+            (StatusCode::BAD_REQUEST, "The config.toml in the archive is not valid UTF-8".to_string())
+        })?;
+
+        // Validate TOML — use structured error so message is safe to return
+        toml::from_str::<toml::Table>(toml_str).map_err(|e| {
+            (StatusCode::BAD_REQUEST, format!("The config.toml in the archive is not valid TOML: {e}"))
+        })?;
+
+        Ok(toml_content)
+    }).await;
+
+    match result {
+        Ok(Ok(toml_content)) => {
+            // Write the restored config (blocking write, but small file)
+            match tokio::fs::write("config.toml", &toml_content).await {
+                Ok(()) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "message": "Configuration restored successfully. Restart the bot to apply the new settings."
+                    })),
+                )
+                    .into_response(),
+                Err(e) => {
+                    tracing::error!("config_restore: failed to write config.toml: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({ "error": "Could not write the restored configuration to disk" })),
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Ok(Err((status, msg))) => {
+            (status, Json(serde_json::json!({ "error": msg }))).into_response()
+        }
+        Err(e) => {
+            tracing::error!("config_restore: spawn_blocking panicked: {e}");
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"Could not read the configuration entry from the archive\"}",
+                Json(serde_json::json!({ "error": "Internal error during restore" })),
             )
-                .into_response();
+                .into_response()
         }
-        buf
-    };
-
-    // Validate the TOML before writing
-    let toml_str = match std::str::from_utf8(&toml_content) {
-        Ok(s) => s,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                [(header::CONTENT_TYPE, "application/json")],
-                "{\"error\":\"The config.toml in the archive is not valid UTF-8\"}",
-            )
-                .into_response();
-        }
-    };
-
-    if let Err(e) = toml::from_str::<toml::Table>(toml_str) {
-        let body = format!("{{\"error\":\"The config.toml in the archive is not valid TOML: {e}\"}}");
-        return (
-            StatusCode::BAD_REQUEST,
-            [(header::CONTENT_TYPE, "application/json")],
-            body,
-        )
-            .into_response();
     }
-
-    // Write restored config
-    if let Err(e) = std::fs::write("config.toml", &toml_content) {
-        tracing::error!("config_restore: failed to write config.toml: {e}");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            [(header::CONTENT_TYPE, "application/json")],
-            "{\"error\":\"Could not write the restored configuration to disk\"}",
-        )
-            .into_response();
-    }
-
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        "{\"success\":true,\"message\":\"Configuration restored successfully. Restart the bot to apply the new settings.\"}",
-    )
-        .into_response()
 }
 
 // ---------------------------------------------------------------------------
@@ -736,9 +718,14 @@ pub fn router() -> Router<SharedState> {
         .route("/control/reload-commands", post(control_reload_commands))
         // Dashboard settings form
         .route("/dashboard/settings", post(dashboard_settings))
-        // Config backup / restore
+        // Config backup / restore — restore has a 5 MB body limit to prevent
+        // memory exhaustion from large or malicious ZIP uploads.
         .route("/api/config/backup",  get(config_backup))
-        .route("/api/config/restore", post(config_restore))
+        .route(
+            "/api/config/restore",
+            post(config_restore)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
         // JSON API
         .route("/health", get(health))
         .route("/api/stats", get(stats))

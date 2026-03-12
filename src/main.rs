@@ -47,11 +47,6 @@ async fn main() -> anyhow::Result<()> {
         setup_cfg.dashboard.port = setup_port;
         let state = Arc::new(state::AppState::new(setup_cfg, None));
 
-        info!(
-            "Setup dashboard listening on http://127.0.0.1:{}",
-            setup_port
-        );
-
         // In setup mode, the dashboard is the only active component.
         // It will shut down automatically once the user saves the configuration
         // (signalled via `AppState::setup_complete`).
