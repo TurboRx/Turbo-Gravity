@@ -82,11 +82,11 @@ pub async fn login(State(state): State<SharedState>) -> Response {
     // Persist the CSRF state so the callback can validate it.
     {
         let mut states = state.oauth_states.lock().await;
-        // Evict one entry to prevent unbounded growth without invalidating all
-        // in-flight login attempts.
+        // Evict one arbitrary entry to prevent unbounded growth without
+        // invalidating all in-flight login attempts.
         if states.len() >= 256 {
-            if let Some(oldest) = states.keys().next().cloned() {
-                states.remove(&oldest);
+            if let Some(evicted_key) = states.keys().next().cloned() {
+                states.remove(&evicted_key);
             }
         }
         states.insert(csrf_token.secret().clone(), ());
