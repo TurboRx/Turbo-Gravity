@@ -51,9 +51,12 @@ async fn stats(State(state): State<SharedState>) -> Json<StatsResponse> {
     })
 }
 
-/// GET /api/config — returns public (non-secret) configuration fields
+/// GET /api/config — returns configuration fields for the admin dashboard.
+///
+/// This handler is registered under `config_router()` which is protected by the
+/// `require_admin` middleware, so it is only reachable by authenticated admins.
 #[derive(Serialize)]
-struct PublicConfig {
+struct AdminConfig {
     command_scope: String,
     presence_text: String,
     guild_id: String,
@@ -61,8 +64,8 @@ struct PublicConfig {
     enable_dashboard: bool,
 }
 
-async fn public_config(State(state): State<SharedState>) -> Json<PublicConfig> {
-    Json(PublicConfig {
+async fn public_config(State(state): State<SharedState>) -> Json<AdminConfig> {
+    Json(AdminConfig {
         command_scope: state.config.bot.command_scope.clone(),
         presence_text: state.config.bot.presence_text.clone(),
         guild_id: state.config.bot.guild_id.clone(),

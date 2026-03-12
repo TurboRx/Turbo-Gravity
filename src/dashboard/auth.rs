@@ -17,7 +17,7 @@ use axum::{
     Json,
 };
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
+    AuthUrl, ClientId, ClientSecret, CsrfToken, RedirectUrl,
     Scope, TokenUrl,
     basic::BasicClient,
 };
@@ -82,9 +82,12 @@ pub async fn login(State(state): State<SharedState>) -> Response {
     // Persist the CSRF state so the callback can validate it.
     {
         let mut states = state.oauth_states.lock().await;
-        // Evict old states to prevent unbounded growth (keep most recent 256).
+        // Evict one entry to prevent unbounded growth without invalidating all
+        // in-flight login attempts.
         if states.len() >= 256 {
-            states.clear();
+            if let Some(oldest) = states.keys().next().cloned() {
+                states.remove(&oldest);
+            }
         }
         states.insert(csrf_token.secret().clone(), ());
     }
@@ -151,8 +154,6 @@ pub async fn callback(
     let client_id = oauth_client.client_id().as_str().to_owned();
     let client_secret_val = std::env::var("DISCORD_CLIENT_SECRET")
         .unwrap_or_else(|_| state.config.dashboard.client_secret.clone());
-
-    let _ = AuthorizationCode::new(params.code.clone()); // type-checked by oauth2
 
     let http = reqwest::Client::new();
     let token_resp = match http
@@ -233,9 +234,13 @@ pub async fn callback(
     let session_id = generate_session_id();
     {
         let mut sessions = state.sessions.lock().await;
-        // Evict stale sessions to prevent unbounded growth (keep most recent 64).
+        // Evict one entry to prevent unbounded growth without invalidating all
+        // active sessions (important: do NOT clear the whole map or the current
+        // admin would be logged out immediately after logging in).
         if sessions.len() >= 64 {
-            sessions.clear();
+            if let Some(oldest) = sessions.keys().next().cloned() {
+                sessions.remove(&oldest);
+            }
         }
         sessions.insert(session_id.clone(), discord_user.id.clone());
     }
@@ -326,11 +331,13 @@ pub async fn require_admin(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Generate a cryptographically random 32-byte session ID, hex-encoded.
+/// Generate a cryptographically random 32-byte session ID, hex-encoded (64 chars).
 fn generate_session_id() -> String {
-    (0..32)
-        .map(|_| format!("{:02x}", rand::random::<u8>()))
-        .collect()
+    let mut id = String::with_capacity(64);
+    for _ in 0..32 {
+        let _ = std::fmt::Write::write_fmt(&mut id, format_args!("{:02x}", rand::random::<u8>()));
+    }
+    id
 }
 
 // ---------------------------------------------------------------------------
