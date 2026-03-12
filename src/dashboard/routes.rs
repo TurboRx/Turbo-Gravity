@@ -85,7 +85,7 @@ async fn styles() -> Response {
 
 /// GET / — redirect to setup wizard when unconfigured; otherwise redirect to the dashboard
 async fn root(State(state): State<SharedState>) -> Response {
-    let location = if state.config.bot.token.trim().is_empty() {
+    let location = if crate::config::needs_setup(&state.config) {
         "/setup"
     } else {
         "/dashboard"
@@ -199,7 +199,7 @@ fn default_port_str() -> String {
     "8080".to_string()
 }
 
-/// `POST /setup` — save the wizard form to `config.toml` and redirect to `/dashboard`.
+/// `POST /setup` — save the wizard form to `config.toml` and show the setup-complete page.
 async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
     use crate::config::{BotConfig, Config, DashboardConfig, DatabaseConfig};
 

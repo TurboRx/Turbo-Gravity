@@ -46,13 +46,7 @@ Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity
 
 2. **Configure the bot**
 
-   **Option A — Setup Wizard (recommended for non-programmers)**
-   Start the bot once, then open `http://localhost:8080/setup` in your browser to configure everything through a guided form.
-
-   **Option B — Edit config directly**
-   ```bash
-   nano config.toml   # at minimum set bot.token
-   ```
+   Run the bot once and open `http://127.0.0.1:8080/setup` in your browser to configure everything through the setup wizard.
 
 3. **Build and run**
    ```bash
@@ -141,7 +135,7 @@ The optional web dashboard runs at `http://localhost:8080` (or the configured po
 |---|---|
 | `GET /dashboard` | Main control panel — analytics, bot modules, quick actions |
 | `GET /setup` | Browser-based setup wizard (pre-fills current config) |
-| `POST /setup` | Saves wizard form to `config.toml` and redirects to `/dashboard` |
+| `POST /setup` | Saves wizard form to `config.toml` and shows the setup-complete page |
 | `GET /selector` | Guild selector — lists all servers the bot is in |
 | `GET /health` | Liveness probe — returns `{"status":"ok","version":"..."}` |
 | `GET /api/stats` | Runtime stats (DB connected, bot configured, port) |
