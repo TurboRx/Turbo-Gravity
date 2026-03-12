@@ -165,14 +165,44 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Returns `true` when the configuration is not yet sufficient to run the bot
+/// (first-run / setup mode). Currently this requires both a non-empty token and
+/// a non-empty, numeric client_id.
+/// Use this after `load()` to decide whether to start the setup wizard instead of the bot.
+pub fn needs_setup(cfg: &Config) -> bool {
+    let token_empty = cfg.bot.token.trim().is_empty();
+    let client_id_str = cfg.bot.client_id.trim();
+
+    let client_id_invalid = client_id_str.is_empty() || client_id_str.parse::<u64>().is_err();
+
+    token_empty || client_id_invalid
+}
+
 /// Load `config.toml` from the current working directory.
+///
+/// If the file is absent, a default unconfigured `Config` is returned so that
+/// `main` can detect setup mode via [`needs_setup`] and launch the setup wizard.
+/// Validation is intentionally **not** performed here; call [`validate`] separately
+/// once you have confirmed the configuration is complete.
 pub fn load() -> anyhow::Result<Config> {
     let path = Path::new("config.toml");
+    if !path.exists() {
+        return Ok(Config {
+            bot: BotConfig {
+                token: String::new(),
+                client_id: String::new(),
+                guild_id: String::new(),
+                command_scope: DEFAULT_COMMAND_SCOPE.to_string(),
+                presence_text: DEFAULT_PRESENCE_TEXT.to_string(),
+                presence_type: 0,
+            },
+            database: DatabaseConfig::default(),
+            dashboard: DashboardConfig::default(),
+        });
+    }
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read config file at '{}'", path.display()))?;
-    let cfg: Config = toml::from_str(&raw).context("Failed to parse config.toml")?;
-    validate(&cfg)?;
-    Ok(cfg)
+    toml::from_str(&raw).context("Failed to parse config.toml")
 }
 
 /// Serialize `Config` back to `config.toml` in the current working directory.
@@ -310,5 +340,50 @@ admin_ids = ["42"]
         assert_eq!(restored.dashboard.enable_dashboard, original.dashboard.enable_dashboard);
         assert_eq!(restored.dashboard.port, original.dashboard.port);
         assert_eq!(restored.dashboard.admin_ids, original.dashboard.admin_ids);
+    }
+
+    #[test]
+    fn needs_setup_true_when_token_empty() {
+        let cfg: Config = toml::from_str(
+            r#"[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        assert!(needs_setup(&cfg));
+    }
+
+    #[test]
+    fn needs_setup_true_when_token_whitespace_only() {
+        let cfg: Config = toml::from_str(
+            r#"[bot]
+token = "   "
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        assert!(needs_setup(&cfg));
+    }
+
+    #[test]
+    fn needs_setup_false_when_token_set() {
+        let cfg: Config = toml::from_str(minimal_toml()).unwrap();
+        assert!(!needs_setup(&cfg));
+    }
+
+    #[test]
+    fn load_returns_default_when_config_file_missing() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let result = load();
+
+        std::env::set_current_dir(&original_dir).unwrap();
+
+        let cfg = result.expect("load() must succeed even when config.toml is absent");
+        assert!(needs_setup(&cfg), "a missing config file should trigger setup mode");
+        assert_eq!(cfg.dashboard.port, DEFAULT_PORT);
     }
 }

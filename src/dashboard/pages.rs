@@ -1171,6 +1171,46 @@ pub fn selector_page(data: &SelectorData) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Setup-complete page  (centered card, shown after the setup wizard is saved)
+// ---------------------------------------------------------------------------
+
+/// Rendered after a successful `POST /setup` submission.
+/// Tells the user to restart the bot to connect to Discord.
+pub fn setup_complete_page() -> String {
+    let head = html_head("Setup Complete", "");
+    let foot = html_foot();
+
+    format!(
+        r#"{head}
+<div class="setup-page">
+  <div class="setup-card">
+    <div class="setup-header">
+      <div class="setup-logo"><span class="material-symbols-rounded mi-setup" style="color:var(--green)">check_circle</span></div>
+      <h1>Setup Complete!</h1>
+      <p>Your configuration has been saved to <code>config.toml</code>.</p>
+    </div>
+
+    <div class="setup-section">
+      <div class="setup-section-header">
+        <span class="setup-section-icon"><span class="material-symbols-rounded mi-setup">rocket_launch</span></span>
+        <span class="setup-section-title">Start the Bot</span>
+      </div>
+      <p style="color:var(--text2);margin-bottom:14px">
+        Restart the bot to connect it to Discord. In your terminal, run:
+      </p>
+      <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:13px;overflow-x:auto">cargo run --release</pre>
+    </div>
+
+    <div style="margin-top:28px;display:flex;gap:12px;justify-content:center">
+      <a class="btn btn-ghost" href="/setup">&#x2190; Edit Configuration</a>
+    </div>
+  </div>
+</div>
+{foot}"#
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Error page
 // ---------------------------------------------------------------------------
 

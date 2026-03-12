@@ -20,8 +20,51 @@ async fn main() -> anyhow::Result<()> {
     // Load optional .env file (ignored if absent)
     let _ = dotenvy::dotenv();
 
-    // Load config.toml
+    // Load config.toml (or a default unconfigured config if the file is absent).
+    // Validation is deferred until we know the bot is actually configured.
     let cfg = config::load()?;
+
+    // -- Setup mode -----------------------------------------------------------
+    // If the bot is not yet fully configured (fresh clone / first run), skip
+    // Discord entirely and start the setup wizard so the user can configure
+    // everything through a browser before the bot tries to connect.
+    if config::needs_setup(&cfg) {
+        // Fall back to the default port if the configured port is invalid (e.g. 0).
+        let setup_port = if cfg.dashboard.port > 0 {
+            cfg.dashboard.port
+        } else {
+            config::DEFAULT_PORT
+        };
+
+        info!("No bot token configured -- entering setup mode");
+        info!(
+            "Open http://127.0.0.1:{}/setup in your browser to configure the bot.",
+            setup_port
+        );
+        info!("Once you save the configuration, restart the bot to connect to Discord.");
+
+        // Build a state with the (possibly corrected) port so the server binds correctly.
+        let mut setup_cfg = cfg.clone();
+        setup_cfg.dashboard.port = setup_port;
+        let state = Arc::new(state::AppState::new(setup_cfg, None));
+
+        info!(
+            "Setup dashboard listening on http://127.0.0.1:{}",
+            setup_port
+        );
+
+        // In setup mode, the dashboard is the only active component.
+        // Run it in the foreground so that startup failures propagate
+        // instead of leaving the process hanging while waiting for a
+        // shutdown signal.
+        dashboard::serve(state).await?;
+        info!("Shutting down setup wizard. Run the bot again after saving your configuration.");
+        return Ok(());
+    }
+    // -------------------------------------------------------------------------
+
+    // Full validation -- only reached when the bot token is present.
+    config::validate(&cfg)?;
     info!("Configuration loaded");
 
     // Connect to MongoDB (optional – bot runs without a DB if uri is empty)
