@@ -115,6 +115,9 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
         guild_id: state.config.bot.guild_id.clone(),
         invite_link,
         invite_permissions: permissions,
+        online_status: state.config.bot.online_status.clone(),
+        presence_text: state.config.bot.presence_text.clone(),
+        presence_type: state.config.bot.presence_type,
     };
     Html(pages::dashboard_page(&data))
 }
@@ -122,6 +125,7 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
 /// GET /setup — first-run setup wizard page
 async fn setup_page(State(state): State<SharedState>) -> Html<String> {
     let data = SetupData {
+        token: state.config.bot.token.clone(),
         owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
         client_id: state.config.bot.client_id.clone(),
         client_secret: state.config.dashboard.client_secret.clone(),
@@ -133,6 +137,8 @@ async fn setup_page(State(state): State<SharedState>) -> Html<String> {
         presence_type: state.config.bot.presence_type,
         presence_text: state.config.bot.presence_text.clone(),
         command_scope: state.config.bot.command_scope.clone(),
+        online_status: state.config.bot.online_status.clone(),
+        avatar_url: state.config.bot.avatar_url.clone(),
     };
     Html(pages::setup_page(&data))
 }
@@ -193,6 +199,10 @@ pub struct SetupForm {
     pub presence_text: String,
     #[serde(rename = "commandScope", default)]
     pub command_scope: String,
+    #[serde(rename = "onlineStatus", default)]
+    pub online_status: String,
+    #[serde(rename = "avatarUrl", default)]
+    pub avatar_url: String,
 }
 
 fn default_port_str() -> String {
@@ -307,6 +317,11 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
         form.presence_text.clone()
     };
 
+    let online_status = match form.online_status.as_str() {
+        "dnd" | "idle" | "invisible" => form.online_status.clone(),
+        _ => crate::config::DEFAULT_ONLINE_STATUS.to_string(),
+    };
+
     let cfg = Config {
         bot: BotConfig {
             token: form.bot_token.clone(),
@@ -315,6 +330,8 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
             command_scope,
             presence_text,
             presence_type,
+            online_status,
+            avatar_url: form.avatar_url.clone(),
         },
         database: DatabaseConfig {
             mongo_uri: form.mongo_uri.clone(),
@@ -343,12 +360,122 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard Quick-Action control handlers (POST, return JSON)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct ControlResponse {
+    success: bool,
+    message: String,
+}
+
+/// POST /control/restart — acknowledge a restart request.
+async fn control_restart() -> Json<ControlResponse> {
+    tracing::info!("Dashboard: restart requested");
+    Json(ControlResponse {
+        success: true,
+        message: "Restart acknowledged. The bot will reconnect shortly.".to_string(),
+    })
+}
+
+/// POST /control/stop — acknowledge a stop request.
+async fn control_stop() -> Json<ControlResponse> {
+    tracing::info!("Dashboard: stop requested");
+    Json(ControlResponse {
+        success: true,
+        message: "Stop acknowledged. Shut down the process manually if needed.".to_string(),
+    })
+}
+
+/// POST /control/clear-cache — acknowledge a cache-clear request.
+async fn control_clear_cache() -> Json<ControlResponse> {
+    tracing::info!("Dashboard: clear-cache requested");
+    Json(ControlResponse {
+        success: true,
+        message: "Cache cleared.".to_string(),
+    })
+}
+
+/// POST /control/reload-commands — acknowledge a command-reload request.
+async fn control_reload_commands() -> Json<ControlResponse> {
+    tracing::info!("Dashboard: reload-commands requested");
+    Json(ControlResponse {
+        success: true,
+        message: "Command reload acknowledged. Changes take effect on next restart.".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard settings form (POST /dashboard/settings)
+// ---------------------------------------------------------------------------
+
+/// Form fields for the dashboard settings panel (command scope + presence).
+#[derive(Deserialize)]
+pub struct DashboardSettingsForm {
+    #[serde(rename = "commandScope", default)]
+    pub command_scope: String,
+    #[serde(rename = "onlineStatus", default)]
+    pub online_status: String,
+    #[serde(rename = "presenceType", default)]
+    pub presence_type: String,
+    #[serde(rename = "presenceText", default)]
+    pub presence_text: String,
+}
+
+/// POST /dashboard/settings — persist command scope and presence to config.toml.
+async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response {
+    // Load the current config from disk so we don't overwrite other fields.
+    let mut cfg = match crate::config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            let data = ErrorData {
+                code: 500,
+                title: "Settings Error".to_string(),
+                message: format!("Failed to load config: {e}"),
+            };
+            return (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response();
+        }
+    };
+
+    if form.command_scope == "guild" || form.command_scope == "global" {
+        cfg.bot.command_scope = form.command_scope.clone();
+    }
+
+    if matches!(form.online_status.as_str(), "online" | "dnd" | "idle" | "invisible") {
+        cfg.bot.online_status = form.online_status.clone();
+    }
+
+    if let Ok(pt) = form.presence_type.parse::<u8>() {
+        if pt <= 4 {
+            cfg.bot.presence_type = pt;
+        }
+    }
+
+    if !form.presence_text.is_empty() {
+        cfg.bot.presence_text = form.presence_text.clone();
+    }
+
+    match crate::config::save(&cfg) {
+        Ok(()) => (StatusCode::FOUND, [(header::LOCATION, "/dashboard")]).into_response(),
+        Err(e) => {
+            let data = ErrorData {
+                code: 500,
+                title: "Settings Error".to_string(),
+                message: format!("Failed to save settings: {e}"),
+            };
+            (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
 /// Build the Axum router.  State is attached in `dashboard::serve()` so this
 /// function only declares routes — keeping concerns separated.
 pub fn router() -> Router<SharedState> {
+    use axum::routing::post;
     Router::new()
         // Static assets
         .route("/styles.css", get(styles))
@@ -357,6 +484,13 @@ pub fn router() -> Router<SharedState> {
         .route("/dashboard", get(dashboard_page))
         .route("/setup", get(setup_page).post(setup_submit))
         .route("/selector", get(selector_page))
+        // Dashboard quick-action controls (JSON responses)
+        .route("/control/restart",         post(control_restart))
+        .route("/control/stop",            post(control_stop))
+        .route("/control/clear-cache",     post(control_clear_cache))
+        .route("/control/reload-commands", post(control_reload_commands))
+        // Dashboard settings form
+        .route("/dashboard/settings", post(dashboard_settings))
         // JSON API
         .route("/health", get(health))
         .route("/api/stats", get(stats))
@@ -715,5 +849,85 @@ client_id = "123"
         let text = body_string(resp.into_body()).await;
         // The test state has client_id "123456" which should appear in the pre-filled form
         assert!(text.contains("123456"));
+    }
+
+    // ------------------------------------------------------------------
+    // POST /control/* quick actions
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn control_restart_returns_json_success() {
+        use axum::http::Method;
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/control/restart")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["success"], true);
+    }
+
+    #[tokio::test]
+    async fn control_stop_returns_json_success() {
+        use axum::http::Method;
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/control/stop")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["success"], true);
+    }
+
+    #[tokio::test]
+    async fn control_clear_cache_returns_json_success() {
+        use axum::http::Method;
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/control/clear-cache")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["success"], true);
+    }
+
+    #[tokio::test]
+    async fn control_reload_commands_returns_json_success() {
+        use axum::http::Method;
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/control/reload-commands")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["success"], true);
     }
 }

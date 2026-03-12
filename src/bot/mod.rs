@@ -1,6 +1,7 @@
 pub mod commands;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use poise::serenity_prelude as serenity;
 use tracing::info;
@@ -13,8 +14,33 @@ pub type Error = anyhow::Error;
 /// Poise context type.  `SharedState` is our `Data` type parameter.
 pub type Context<'a> = poise::Context<'a, SharedState, Error>;
 
-/// Start the Discord bot and block until it shuts down.
+/// Start the Discord bot with automatic reconnection on failure.
+/// Retries with exponential back-off (5 s → 10 s → … → 5 min cap).
 pub async fn start(state: SharedState) -> anyhow::Result<()> {
+    let mut retry_delay = Duration::from_secs(5);
+    const MAX_DELAY: Duration = Duration::from_secs(300);
+
+    loop {
+        info!("Starting Discord client…");
+        match run_client(Arc::clone(&state)).await {
+            Ok(()) => {
+                // Clean shutdown (e.g. SIGTERM) — don't retry.
+                info!("Discord client exited cleanly.");
+                return Ok(());
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Discord client disconnected: {e}. Reconnecting in {retry_delay:?}…"
+                );
+                tokio::time::sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(MAX_DELAY);
+            }
+        }
+    }
+}
+
+/// Build the Serenity/Poise client and run it until it exits or errors.
+async fn run_client(state: SharedState) -> anyhow::Result<()> {
     let token = state.config.bot.token.clone();
     let intents = serenity::GatewayIntents::non_privileged()
         | serenity::GatewayIntents::GUILD_MEMBERS
@@ -81,9 +107,14 @@ pub async fn start(state: SharedState) -> anyhow::Result<()> {
                         );
                     }
 
-                    // Set initial bot presence
-                    let activity = presence_activity(cfg.presence_type, &cfg.presence_text);
-                    ctx.set_presence(Some(activity), serenity::OnlineStatus::Online);
+                    // Resolve dynamic variables ({servers}, {members}) in presence text
+                    let server_count = ready.guilds.len();
+                    let presence_text = resolve_presence_text(&cfg.presence_text, server_count);
+
+                    // Set initial bot presence using configured online status
+                    let activity = presence_activity(cfg.presence_type, &presence_text);
+                    let online_status = map_online_status(&cfg.online_status);
+                    ctx.set_presence(Some(activity), online_status);
 
                     // Return the Arc<AppState>; this becomes ctx.data() in every command
                     Ok(state)
@@ -98,6 +129,26 @@ pub async fn start(state: SharedState) -> anyhow::Result<()> {
 
     client.start().await?;
     Ok(())
+}
+
+/// Replace `{servers}` and `{members}` placeholders in the presence text.
+/// `server_count` comes from the READY event's guild list (accurate at startup).
+/// `{members}` resolves to "0" at startup because member counts require the cache
+/// to receive all GUILD_CREATE events, which happens asynchronously after READY.
+fn resolve_presence_text(text: &str, server_count: usize) -> String {
+    // Members count is unavailable at READY time; use 0 as a safe initial value.
+    text.replace("{servers}", &server_count.to_string())
+        .replace("{members}", "0")
+}
+
+/// Map the `online_status` config string to a serenity `OnlineStatus` variant.
+fn map_online_status(status: &str) -> serenity::OnlineStatus {
+    match status {
+        "dnd"       => serenity::OnlineStatus::DoNotDisturb,
+        "idle"      => serenity::OnlineStatus::Idle,
+        "invisible" => serenity::OnlineStatus::Invisible,
+        _           => serenity::OnlineStatus::Online,
+    }
 }
 
 /// Map a presence type integer to the correct serenity `ActivityData` variant.
@@ -167,5 +218,40 @@ mod tests {
     fn presence_type_unknown_defaults_to_playing() {
         let a = presence_activity(99, "something");
         assert_eq!(a.kind, serenity::ActivityType::Playing);
+    }
+
+    #[test]
+    fn map_online_status_variants() {
+        assert_eq!(map_online_status("online"),    serenity::OnlineStatus::Online);
+        assert_eq!(map_online_status("dnd"),       serenity::OnlineStatus::DoNotDisturb);
+        assert_eq!(map_online_status("idle"),      serenity::OnlineStatus::Idle);
+        assert_eq!(map_online_status("invisible"), serenity::OnlineStatus::Invisible);
+        // Unknown values fall back to Online
+        assert_eq!(map_online_status(""),          serenity::OnlineStatus::Online);
+        assert_eq!(map_online_status("offline"),   serenity::OnlineStatus::Online);
+    }
+
+    #[test]
+    fn resolve_presence_text_substitutes_servers() {
+        assert_eq!(
+            resolve_presence_text("Watching {servers} servers", 5),
+            "Watching 5 servers"
+        );
+    }
+
+    #[test]
+    fn resolve_presence_text_substitutes_members_as_zero() {
+        assert_eq!(
+            resolve_presence_text("{members} members across {servers} servers", 3),
+            "0 members across 3 servers"
+        );
+    }
+
+    #[test]
+    fn resolve_presence_text_no_placeholders() {
+        assert_eq!(
+            resolve_presence_text("Ready to serve", 10),
+            "Ready to serve"
+        );
     }
 }

@@ -26,6 +26,12 @@ pub struct BotConfig {
     pub presence_text: String,
     #[serde(default)]
     pub presence_type: u8,
+    /// Discord online status: "online" | "dnd" | "idle" | "invisible"
+    #[serde(default = "default_online_status")]
+    pub online_status: String,
+    /// Optional URL to a bot avatar image (fetched and applied at startup).
+    #[serde(default)]
+    pub avatar_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -71,6 +77,7 @@ pub const DEFAULT_COMMAND_SCOPE: &str = "guild";
 pub const DEFAULT_PRESENCE_TEXT: &str = "Ready to serve";
 pub const DEFAULT_CALLBACK_URL: &str = "http://localhost:8080/auth/discord/callback";
 pub const DEFAULT_PORT: u16 = 8080;
+pub const DEFAULT_ONLINE_STATUS: &str = "online";
 
 fn default_command_scope() -> String {
     DEFAULT_COMMAND_SCOPE.into()
@@ -78,6 +85,10 @@ fn default_command_scope() -> String {
 
 fn default_presence_text() -> String {
     DEFAULT_PRESENCE_TEXT.into()
+}
+
+fn default_online_status() -> String {
+    DEFAULT_ONLINE_STATUS.into()
 }
 
 fn default_enable_dashboard() -> bool {
@@ -127,6 +138,13 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
         cfg.bot.presence_type <= 4,
         "config.bot.presence_type must be 0-4 (Playing, Streaming, Listening, Watching, Competing), got {}",
         cfg.bot.presence_type
+    );
+
+    // Validate online_status
+    anyhow::ensure!(
+        matches!(cfg.bot.online_status.as_str(), "online" | "dnd" | "idle" | "invisible"),
+        "config.bot.online_status must be 'online', 'dnd', 'idle', or 'invisible', got '{}'",
+        cfg.bot.online_status
     );
 
     // Validate command_scope is either "guild" or "global"
@@ -195,6 +213,8 @@ pub fn load() -> anyhow::Result<Config> {
                 command_scope: DEFAULT_COMMAND_SCOPE.to_string(),
                 presence_text: DEFAULT_PRESENCE_TEXT.to_string(),
                 presence_type: 0,
+                online_status: DEFAULT_ONLINE_STATUS.to_string(),
+                avatar_url: String::new(),
             },
             database: DatabaseConfig::default(),
             dashboard: DashboardConfig::default(),
@@ -235,6 +255,8 @@ client_id = "123456"
         assert_eq!(cfg.bot.command_scope, "guild");
         assert_eq!(cfg.bot.presence_text, "Ready to serve");
         assert_eq!(cfg.bot.presence_type, 0);
+        assert_eq!(cfg.bot.online_status, "online");
+        assert!(cfg.bot.avatar_url.is_empty());
         assert!(cfg.database.mongo_uri.is_empty());
         // No [dashboard] section → Default impl → enable_dashboard = false
         assert!(!cfg.dashboard.enable_dashboard);
@@ -385,5 +407,22 @@ client_id = "123"
         let cfg = result.expect("load() must succeed even when config.toml is absent");
         assert!(needs_setup(&cfg), "a missing config file should trigger setup mode");
         assert_eq!(cfg.dashboard.port, DEFAULT_PORT);
+        assert_eq!(cfg.bot.online_status, DEFAULT_ONLINE_STATUS);
+    }
+
+    #[test]
+    fn validate_rejects_invalid_online_status() {
+        let mut cfg: Config = toml::from_str(minimal_toml()).unwrap();
+        cfg.bot.online_status = "away".to_string(); // not a valid value
+        assert!(validate(&cfg).is_err());
+    }
+
+    #[test]
+    fn validate_accepts_all_valid_online_statuses() {
+        let mut cfg: Config = toml::from_str(minimal_toml()).unwrap();
+        for status in &["online", "dnd", "idle", "invisible"] {
+            cfg.bot.online_status = status.to_string();
+            assert!(validate(&cfg).is_ok(), "expected ok for status={status}");
+        }
     }
 }

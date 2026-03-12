@@ -461,11 +461,81 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 ::-webkit-scrollbar-track  { background: var(--bg); }
 ::-webkit-scrollbar-thumb  { background: var(--bg3); border-radius: 3px; }
 
+/* ── Ensure minimum 44×44 px tap targets on all interactive elements ─────── */
+.btn            { min-height: 44px; padding: 0 16px; }
+.notif-btn, .theme-btn { width: 44px; height: 44px; }
+.guild-select-btn { min-height: 44px; }
+.setup-submit   { min-height: 44px; }
+
+/* ── InfoTip (inline help tooltips next to form labels) ──────────────────── */
+.infotip-wrap {
+  position: relative;
+  display: inline-flex; align-items: center;
+}
+.infotip-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(124,58,237,0.18); color: var(--purple2);
+  font-size: 10px; font-weight: 700; line-height: 1;
+  cursor: pointer; border: none; margin-left: 5px; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.infotip-trigger:hover  { background: rgba(124,58,237,0.35); }
+.infotip-content {
+  display: none;
+  position: absolute; left: 0; top: calc(100% + 6px);
+  z-index: 300;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 13px;
+  font-size: 12px; color: var(--text2); line-height: 1.5;
+  width: 240px; box-shadow: var(--shadow);
+}
+.infotip-content a { color: var(--purple2); text-decoration: underline; }
+.infotip-wrap:hover .infotip-content,
+.infotip-wrap.open  .infotip-content { display: block; }
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed; bottom: 20px; right: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 9999; pointer-events: none;
+}
+.toast {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 16px;
+  font-size: 13px; color: var(--text);
+  box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 8px;
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: auto; min-width: 200px; max-width: 320px;
+}
+.toast.show           { opacity: 1; transform: translateY(0); }
+.toast.toast-success  { border-left: 3px solid var(--green); }
+.toast.toast-error    { border-left: 3px solid var(--red); }
+.toast.toast-info     { border-left: 3px solid var(--purple); }
+
+/* ── Statistics popover (touch-friendly subcards) ────────────────────────── */
+.subcard { position: relative; cursor: default; }
+.stats-popover {
+  display: none;
+  position: absolute; left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 16px;
+  font-size: 12px; color: var(--text2); line-height: 1.8;
+  width: 200px; box-shadow: var(--shadow);
+  z-index: 200; pointer-events: none;
+}
+.stats-popover strong { color: var(--text); }
+.subcard:hover  .stats-popover,
+.subcard.pop-open .stats-popover { display: block; }
+
 /* ── Hamburger button (hidden on desktop) ────────────────────────────────── */
 .hamburger {
   display: none;
   flex-direction: column; align-items: center; justify-content: center; gap: 5px;
-  width: 36px; height: 36px; border-radius: 8px;
+  width: 44px; height: 44px; border-radius: 8px;
   background: var(--bg3); border: 1px solid var(--border);
   cursor: pointer; flex-shrink: 0;
   transition: background 0.15s;
@@ -571,6 +641,74 @@ function toggleSidebar() {
 </script>"#;
 
 // ---------------------------------------------------------------------------
+// Dashboard JS – fetch-based control actions, toasts, stats popovers, InfoTips
+// ---------------------------------------------------------------------------
+
+const DASHBOARD_SCRIPT: &str = r#"<script>
+/* ── Toast helper ──────────────────────────────────────────────────────── */
+function _toastContainer() {
+  let c = document.getElementById('toast-container');
+  if (!c) { c = document.createElement('div'); c.id = 'toast-container';
+            c.className = 'toast-container'; document.body.appendChild(c); }
+  return c;
+}
+function showToast(msg, type) {
+  type = type || 'info';
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  _toastContainer().appendChild(t);
+  requestAnimationFrame(function() { t.classList.add('show'); });
+  setTimeout(function() {
+    t.classList.remove('show');
+    setTimeout(function() { t.remove(); }, 300);
+  }, 3500);
+}
+
+/* ── Control button handler (fetch + toast, no full-page reload) ─────── */
+function controlAction(form, event) {
+  event.preventDefault();
+  const btn = form.querySelector('button[type=submit]');
+  if (btn) btn.disabled = true;
+  fetch(form.action, { method: 'POST' })
+    .then(function(r) { return r.json().catch(function() { return { message: r.ok ? 'Done' : 'Request failed', success: r.ok }; }); })
+    .then(function(d) { showToast(d.message || 'Done', d.success !== false ? 'success' : 'error'); })
+    .catch(function(e) { showToast('Network error: ' + e.message, 'error'); })
+    .finally(function() { if (btn) btn.disabled = false; });
+}
+
+/* ── Stats subcard touch-friendly popovers ───────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.subcard[data-popover]').forEach(function(card) {
+    function open()  { card.classList.add('pop-open'); }
+    function close() { card.classList.remove('pop-open'); }
+    card.addEventListener('mouseenter', open);
+    card.addEventListener('mouseleave', close);
+    card.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      card.classList.toggle('pop-open');
+    }, { passive: false });
+    // Close when tapping elsewhere
+    document.addEventListener('touchstart', function(e) {
+      if (!card.contains(e.target)) close();
+    }, { passive: true });
+  });
+
+  /* ── InfoTip toggle for touch devices ─────────────────────────────── */
+  document.querySelectorAll('.infotip-trigger').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const wrap = btn.closest('.infotip-wrap');
+      if (wrap) wrap.classList.toggle('open');
+    });
+  });
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.infotip-wrap.open').forEach(function(w) { w.classList.remove('open'); });
+  });
+});
+</script>"#;
+
+// ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
 
@@ -657,15 +795,18 @@ fn html_foot() -> &'static str {
 // ---------------------------------------------------------------------------
 
 pub struct DashboardData {
-    pub bot_status:        &'static str,
-    pub command_scope:     String,
-    pub guild_id:          String,
-    pub invite_link:       String,
+    pub bot_status:         &'static str,
+    pub command_scope:      String,
+    pub guild_id:           String,
+    pub invite_link:        String,
     pub invite_permissions: String,
+    pub online_status:      String,
+    pub presence_text:      String,
+    pub presence_type:      u8,
 }
 
 pub fn dashboard_page(data: &DashboardData) -> String {
-    let head          = html_head("Dashboard", "");
+    let head          = html_head("Dashboard", DASHBOARD_SCRIPT);
     let sidebar       = build_sidebar("Home");
     let topbar        = build_topbar("Dashboard");
     let foot          = html_foot();
@@ -676,9 +817,21 @@ pub fn dashboard_page(data: &DashboardData) -> String {
     let invite_link   = html_escape(&data.invite_link);
     let invite_perms  = html_escape(&data.invite_permissions);
     let guild_id      = html_escape(&data.guild_id);
+    let presence_text = html_escape(&data.presence_text);
 
     let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
     let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
+
+    let ps_online    = if data.online_status == "online"    { " selected" } else { "" };
+    let ps_dnd       = if data.online_status == "dnd"       { " selected" } else { "" };
+    let ps_idle      = if data.online_status == "idle"      { " selected" } else { "" };
+    let ps_invisible = if data.online_status == "invisible" { " selected" } else { "" };
+
+    let pp0 = if data.presence_type == 0 { " selected" } else { "" };
+    let pp1 = if data.presence_type == 1 { " selected" } else { "" };
+    let pp2 = if data.presence_type == 2 { " selected" } else { "" };
+    let pp3 = if data.presence_type == 3 { " selected" } else { "" };
+    let pp4 = if data.presence_type == 4 { " selected" } else { "" };
 
     format!(
         r##"{head}
@@ -736,9 +889,9 @@ pub fn dashboard_page(data: &DashboardData) -> String {
         </div>
       </div>
 
-      <!-- Bot Subgrid: Active Servers + Uptime -->
+      <!-- Bot Subgrid: Active Servers + Uptime (touch-friendly popovers) -->
       <div class="subgrid">
-        <div class="subcard">
+        <div class="subcard" data-popover="true" title="Tap for details">
           <div class="subcard-title">Active Servers</div>
           <div class="server-list">
             <div class="server-row">
@@ -751,13 +904,25 @@ pub fn dashboard_page(data: &DashboardData) -> String {
               <span class="status-badge {status_class}">{status_dot}{status_text}</span>
             </div>
           </div>
+          <div class="stats-popover">
+            <strong>Server Details</strong><br/>
+            Guild ID: {guild_id}<br/>
+            Status: {status_text}<br/>
+            Region: Auto
+          </div>
         </div>
-        <div class="subcard">
+        <div class="subcard" data-popover="true" title="Tap for details">
           <div class="subcard-title">Uptime</div>
           <div class="uptime-val">99.9%</div>
           <div class="uptime-label">Last 30 days</div>
           <div class="uptime-bar-wrap">
             <div class="uptime-bar" style="width:99.9%"></div>
+          </div>
+          <div class="stats-popover">
+            <strong>Uptime Stats</strong><br/>
+            30-day: 99.9%<br/>
+            7-day: 100%<br/>
+            Incidents: 0
           </div>
         </div>
       </div>
@@ -768,16 +933,16 @@ pub fn dashboard_page(data: &DashboardData) -> String {
           <span class="card-title"><span class="material-symbols-rounded mi-card">bolt</span> Quick Actions</span>
         </div>
         <div class="btn-actions">
-          <form method="POST" action="/control/restart" style="display:inline">
+          <form method="POST" action="/control/restart" style="display:inline" onsubmit="controlAction(this,event)">
             <button class="btn btn-primary" type="submit"><span class="material-symbols-rounded mi-btn">restart_alt</span> Restart Bot</button>
           </form>
-          <form method="POST" action="/control/stop" style="display:inline">
+          <form method="POST" action="/control/stop" style="display:inline" onsubmit="controlAction(this,event)">
             <button class="btn btn-danger" type="submit"><span class="material-symbols-rounded mi-btn">stop_circle</span> Stop Bot</button>
           </form>
-          <form method="POST" action="/control/clear-cache" style="display:inline">
+          <form method="POST" action="/control/clear-cache" style="display:inline" onsubmit="controlAction(this,event)">
             <button class="btn btn-ghost" type="submit"><span class="material-symbols-rounded mi-btn">mop</span> Clear Cache</button>
           </form>
-          <form method="POST" action="/control/reload-commands" style="display:inline">
+          <form method="POST" action="/control/reload-commands" style="display:inline" onsubmit="controlAction(this,event)">
             <button class="btn btn-cyan" type="submit"><span class="material-symbols-rounded mi-btn">sync</span> Reload Commands</button>
           </form>
         </div>
@@ -818,6 +983,52 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 
     <!-- ── Right column ─────────────────────────────────────────────── -->
     <div class="col-right">
+
+      <!-- Bot Presence Settings -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">emoji_emotions</span> Bot Presence</span>
+        </div>
+        <form method="POST" action="/dashboard/settings">
+          <div class="setup-grid" style="margin-bottom:12px">
+            <div class="setup-field">
+              <label>Online Status</label>
+              <select class="form-select" name="onlineStatus" style="width:100%">
+                <option value="online"{ps_online}>&#x1F7E2; Online</option>
+                <option value="idle"{ps_idle}>&#x1F7E1; Idle</option>
+                <option value="dnd"{ps_dnd}>&#x1F534; Do Not Disturb</option>
+                <option value="invisible"{ps_invisible}>&#x26AA; Invisible</option>
+              </select>
+            </div>
+            <div class="setup-field">
+              <label>Activity Type</label>
+              <select class="form-select" name="presenceType" style="width:100%">
+                <option value="0"{pp0}>Playing</option>
+                <option value="1"{pp1}>Streaming</option>
+                <option value="2"{pp2}>Listening to</option>
+                <option value="3"{pp3}>Watching</option>
+                <option value="4"{pp4}>Competing in</option>
+              </select>
+            </div>
+            <div class="setup-field full">
+              <label>Status Text
+                <span class="infotip-wrap">
+                  <button type="button" class="infotip-trigger" aria-label="Help for status text">?</button>
+                  <span class="infotip-content" role="tooltip">
+                    Supports dynamic variables:<br/>
+                    <code>&#x7B;servers&#x7D;</code> — server count<br/>
+                    <code>&#x7B;members&#x7D;</code> — total members (shows 0 at startup)
+                  </span>
+                </span>
+              </label>
+              <input class="form-input" type="text" name="presenceText" value="{presence_text}" placeholder="Ready to serve" style="width:100%" />
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%">
+            <span class="material-symbols-rounded mi-btn">save</span> Save Presence
+          </button>
+        </form>
+      </div>
 
       <!-- Bot Modules -->
       <div class="card">
@@ -878,7 +1089,9 @@ pub fn dashboard_page(data: &DashboardData) -> String {
               <label class="toggle">
                 <input type="checkbox" aria-label="Toggle Leveling module" />
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label> to reward your most active members.</p>
+              </label>
+            </div>
+            <p class="module-desc">XP system to reward your most active members.</p>
           </div>
 
           <div class="module-card">
@@ -917,6 +1130,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 </main>
 </div><!-- /main-wrapper -->
 </div><!-- /layout -->
+<div id="toast-container" class="toast-container"></div>
 {foot}"##
     )
 }
@@ -926,6 +1140,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct SetupData {
+    pub token:          String,
     pub owner_id:       String,
     pub client_id:      String,
     pub client_secret:  String,
@@ -937,10 +1152,12 @@ pub struct SetupData {
     pub presence_type:  u8,
     pub presence_text:  String,
     pub command_scope:  String,
+    pub online_status:  String,
+    pub avatar_url:     String,
 }
 
 pub fn setup_page(data: &SetupData) -> String {
-    let head = html_head("Setup", "");
+    let head = html_head("Setup", DASHBOARD_SCRIPT);
     let foot = html_foot();
 
     let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
@@ -950,6 +1167,11 @@ pub fn setup_page(data: &SetupData) -> String {
     let p2 = if data.presence_type == 2 { " selected" } else { "" };
     let p3 = if data.presence_type == 3 { " selected" } else { "" };
     let p4 = if data.presence_type == 4 { " selected" } else { "" };
+
+    let ps_online    = if data.online_status == "online"    { " selected" } else { "" };
+    let ps_dnd       = if data.online_status == "dnd"       { " selected" } else { "" };
+    let ps_idle      = if data.online_status == "idle"      { " selected" } else { "" };
+    let ps_invisible = if data.online_status == "invisible" { " selected" } else { "" };
 
     let callback_url = if data.callback_url.is_empty() {
         if data.port == crate::config::DEFAULT_PORT {
@@ -961,6 +1183,7 @@ pub fn setup_page(data: &SetupData) -> String {
         data.callback_url.clone()
     };
 
+    let token          = html_escape(&data.token);
     let client_id      = html_escape(&data.client_id);
     let client_secret  = html_escape(&data.client_secret);
     let callback_url_e = html_escape(&callback_url);
@@ -970,6 +1193,7 @@ pub fn setup_page(data: &SetupData) -> String {
     let guild_id       = html_escape(&data.guild_id);
     let port           = data.port;
     let presence_text  = html_escape(&data.presence_text);
+    let avatar_url     = html_escape(&data.avatar_url);
 
     format!(
         r#"{head}
@@ -980,6 +1204,13 @@ pub fn setup_page(data: &SetupData) -> String {
       <div class="setup-logo"><span class="material-symbols-rounded mi-setup">bolt</span></div>
       <h1>Turbo Gravity Setup</h1>
       <p>Configure your Discord bot &#x2014; no coding required.</p>
+      <p style="margin-top:8px;font-size:12px;color:var(--text3)">
+        Need your credentials?
+        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer"
+           style="color:var(--purple2);text-decoration:underline">
+          Open Discord Developer Portal &#x2197;
+        </a>
+      </p>
     </div>
 
     <form method="POST" action="/setup">
@@ -991,16 +1222,56 @@ pub fn setup_page(data: &SetupData) -> String {
           <span class="setup-section-title">Discord Credentials</span>
         </div>
         <div class="setup-grid">
+          <div class="setup-field full">
+            <label>
+              Bot Token
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: where to find Bot Token">?</button>
+                <span class="infotip-content" role="tooltip">
+                  In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal</a>
+                  &#x2192; Your App &#x2192; <strong>Bot</strong> &#x2192; Reset Token.
+                </span>
+              </span>
+            </label>
+            <input type="password" name="botToken" value="{token}" placeholder="Bot token from the Developer Portal" autocomplete="new-password" required />
+          </div>
           <div class="setup-field">
-            <label>Client ID (Application ID)</label>
+            <label>
+              Client ID (Application ID)
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: where to find Client ID">?</button>
+                <span class="infotip-content" role="tooltip">
+                  In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal</a>
+                  &#x2192; Your App &#x2192; <strong>General Information</strong> &#x2192; Application ID.
+                </span>
+              </span>
+            </label>
             <input type="text" name="clientId" value="{client_id}" placeholder="e.g. 1234567890" required />
           </div>
           <div class="setup-field">
-            <label>Client Secret</label>
+            <label>
+              Client Secret
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: where to find Client Secret">?</button>
+                <span class="infotip-content" role="tooltip">
+                  In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal</a>
+                  &#x2192; Your App &#x2192; <strong>OAuth2</strong> &#x2192; Client Secret (reset if hidden).
+                </span>
+              </span>
+            </label>
             <input type="password" name="clientSecret" value="{client_secret}" placeholder="OAuth2 client secret" autocomplete="new-password" />
           </div>
           <div class="setup-field full">
-            <label>OAuth2 Callback URL</label>
+            <label>
+              OAuth2 Callback URL
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: OAuth2 Callback URL">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Add this URL under <strong>OAuth2 &#x2192; Redirects</strong> in the Developer Portal.
+                  Must match exactly.
+                </span>
+              </span>
+            </label>
             <input type="url" name="callbackUrl" value="{callback_url_e}" required />
           </div>
         </div>
@@ -1014,7 +1285,17 @@ pub fn setup_page(data: &SetupData) -> String {
         </div>
         <div class="setup-grid">
           <div class="setup-field full">
-            <label>MongoDB URI</label>
+            <label>
+              MongoDB URI
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: MongoDB URI">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Leave blank to run without a database. Format:<br/>
+                  <code>mongodb://localhost:27017</code><br/>
+                  or <code>mongodb+srv://user:pass@cluster</code>
+                </span>
+              </span>
+            </label>
             <input type="text" name="mongoUri" value="{mongo_uri}" placeholder="mongodb://localhost:27017/turbogravity" />
           </div>
           <div class="setup-field full">
@@ -1022,7 +1303,16 @@ pub fn setup_page(data: &SetupData) -> String {
             <input type="password" name="sessionSecret" value="{session_secret}" placeholder="Random secure string" autocomplete="new-password" />
           </div>
           <div class="setup-field full">
-            <label>Admin User IDs (comma-separated Discord user IDs)</label>
+            <label>
+              Admin User IDs (comma-separated Discord user IDs)
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: Admin User IDs">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Your Discord user ID. Enable <strong>Developer Mode</strong> in Discord settings,
+                  then right-click your username &#x2192; Copy User ID.
+                </span>
+              </span>
+            </label>
             <input type="text" name="adminIds" value="{owner_id}" placeholder="123456789,987654321" />
           </div>
         </div>
@@ -1036,12 +1326,29 @@ pub fn setup_page(data: &SetupData) -> String {
         </div>
         <div class="setup-grid">
           <div class="setup-field">
-            <label>Guild ID (leave blank for global commands)</label>
+            <label>
+              Guild ID (leave blank for global commands)
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: Guild ID">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Your Discord server ID. Enable Developer Mode, then right-click your server &#x2192; Copy Server ID.
+                </span>
+              </span>
+            </label>
             <input type="text" name="guildId" value="{guild_id}" placeholder="Your server&#x27;s ID" />
           </div>
           <div class="setup-field">
             <label>Dashboard Port</label>
             <input type="number" name="port" value="{port}" min="1" max="65535" required />
+          </div>
+          <div class="setup-field">
+            <label>Online Status</label>
+            <select name="onlineStatus">
+              <option value="online"{ps_online}>&#x1F7E2; Online</option>
+              <option value="idle"{ps_idle}>&#x1F7E1; Idle</option>
+              <option value="dnd"{ps_dnd}>&#x1F534; Do Not Disturb</option>
+              <option value="invisible"{ps_invisible}>&#x26AA; Invisible</option>
+            </select>
           </div>
           <div class="setup-field">
             <label>Presence Type</label>
@@ -1060,8 +1367,31 @@ pub fn setup_page(data: &SetupData) -> String {
               <option value="global"{scope_global_sel}>Global</option>
             </select>
           </div>
+          <div class="setup-field">
+            <label>
+              Avatar URL
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: Avatar URL">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Optional URL to a PNG/JPG image used as the bot&#x27;s avatar.
+                  Leave blank to keep the current avatar.
+                </span>
+              </span>
+            </label>
+            <input type="url" name="avatarUrl" value="{avatar_url}" placeholder="https://example.com/avatar.png" />
+          </div>
           <div class="setup-field full">
-            <label>Presence Text</label>
+            <label>
+              Presence Text
+              <span class="infotip-wrap">
+                <button type="button" class="infotip-trigger" aria-label="Help: Presence Text">?</button>
+                <span class="infotip-content" role="tooltip">
+                  Supports dynamic variables:<br/>
+                  <code>&#x7B;servers&#x7D;</code> &#x2014; server count<br/>
+                  <code>&#x7B;members&#x7D;</code> &#x2014; total members (shows 0 at startup)
+                </span>
+              </span>
+            </label>
             <input type="text" name="presenceText" value="{presence_text}" placeholder="Ready to serve" />
           </div>
         </div>
