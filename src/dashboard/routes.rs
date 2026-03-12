@@ -83,13 +83,14 @@ async fn styles() -> Response {
         .into_response()
 }
 
-/// GET / — redirect to the dashboard page
-async fn root() -> Response {
-    (
-        StatusCode::FOUND,
-        [(header::LOCATION, "/dashboard")],
-    )
-        .into_response()
+/// GET / — redirect to setup wizard when unconfigured; otherwise redirect to the dashboard
+async fn root(State(state): State<SharedState>) -> Response {
+    let location = if state.config.bot.token.trim().is_empty() {
+        "/setup"
+    } else {
+        "/dashboard"
+    };
+    (StatusCode::FOUND, [(header::LOCATION, location)]).into_response()
 }
 
 /// GET /dashboard — main control-panel page
@@ -329,11 +330,7 @@ async fn setup_submit(Form(form): Form<SetupForm>) -> Response {
     };
 
     match crate::config::save(&cfg) {
-        Ok(()) => (
-            StatusCode::FOUND,
-            [(header::LOCATION, "/dashboard")],
-        )
-            .into_response(),
+        Ok(()) => Html(pages::setup_complete_page()).into_response(),
         Err(e) => {
             let data = ErrorData {
                 code: 500,
@@ -539,6 +536,7 @@ client_id = "123"
 
     #[tokio::test]
     async fn root_redirects_to_dashboard() {
+        // test_state() has a non-empty token → should redirect to /dashboard
         let resp = test_app()
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
@@ -548,6 +546,28 @@ client_id = "123"
             resp.headers().get("location").unwrap(),
             "/dashboard"
         );
+    }
+
+    #[tokio::test]
+    async fn root_redirects_to_setup_when_unconfigured() {
+        // Build an app whose state has an empty bot token (fresh-clone / setup mode)
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = ""
+client_id = "123"
+"#,
+        )
+        .unwrap();
+        let state = Arc::new(state::AppState::new(cfg, None));
+        let app = router().with_state(state);
+
+        let resp = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(resp.headers().get("location").unwrap(), "/setup");
     }
 
     #[tokio::test]
@@ -637,7 +657,7 @@ client_id = "123"
     // ------------------------------------------------------------------
 
     #[tokio::test]
-    async fn setup_post_with_valid_form_saves_config_and_redirects() {
+    async fn setup_post_valid_form_shows_complete_page() {
         use axum::http::{header, Method};
 
         // Write a temporary config.toml so the save path exists during the test
@@ -666,9 +686,13 @@ client_id = "123"
         // Restore working directory
         std::env::set_current_dir(&original_dir).unwrap();
 
-        // On success the handler redirects to /dashboard
-        assert_eq!(resp.status(), StatusCode::FOUND);
-        assert_eq!(resp.headers().get("location").unwrap(), "/dashboard");
+        // On success the handler returns the setup-complete HTML page (200 OK)
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_string(resp.into_body()).await;
+        assert!(
+            text.contains("Setup Complete") || text.contains("cargo run"),
+            "expected setup-complete page content, got: {text}"
+        );
 
         // Verify config.toml was written with the submitted values
         let written = std::fs::read_to_string(&config_path).unwrap();
