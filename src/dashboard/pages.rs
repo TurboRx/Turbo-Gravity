@@ -718,8 +718,10 @@ function restoreConfig(input) {
   fetch('/api/config/restore', { method: 'POST', body: formData })
     .then(function(r) { return r.json().catch(function() { return { success: r.ok, message: r.ok ? 'Restored.' : 'Request failed.' }; }); })
     .then(function(d) {
-      if (statusEl) { statusEl.textContent = d.message || (d.success ? 'Restored.' : 'Failed.'); }
-      showToast(d.message || (d.success ? 'Configuration restored!' : 'Restore failed.'), d.success ? 'success' : 'error');
+      var success = (typeof d.success === 'boolean') ? d.success : false;
+      var message = d.message || d.error || (success ? 'Restored.' : 'Failed.');
+      if (statusEl) { statusEl.textContent = message; }
+      showToast(message || (success ? 'Configuration restored!' : 'Restore failed.'), success ? 'success' : 'error');
     })
     .catch(function(e) {
       if (statusEl) { statusEl.textContent = 'Network error: ' + e.message; }
