@@ -1017,7 +1017,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
                   <span class="infotip-content" role="tooltip">
                     Supports dynamic variables:<br/>
                     <code>&#x7B;servers&#x7D;</code> — server count<br/>
-                    <code>&#x7B;members&#x7D;</code> — total members
+                    <code>&#x7B;members&#x7D;</code> — total members (shows 0 at startup)
                   </span>
                 </span>
               </label>
@@ -1388,7 +1388,7 @@ pub fn setup_page(data: &SetupData) -> String {
                 <span class="infotip-content" role="tooltip">
                   Supports dynamic variables:<br/>
                   <code>&#x7B;servers&#x7D;</code> &#x2014; server count<br/>
-                  <code>&#x7B;members&#x7D;</code> &#x2014; total members
+                  <code>&#x7B;members&#x7D;</code> &#x2014; total members (shows 0 at startup)
                 </span>
               </span>
             </label>
