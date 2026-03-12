@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         let state = Arc::new(state::AppState::new(cfg.clone(), None));
         let dashboard_state = Arc::clone(&state);
         info!(
-            "Setup dashboard listening on http://0.0.0.0:{}",
+            "Setup dashboard listening on http://127.0.0.1:{}",
             cfg.dashboard.port
         );
 
