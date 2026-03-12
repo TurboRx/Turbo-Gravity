@@ -743,8 +743,6 @@ pub fn public_router() -> Router<SharedState> {
         .route("/control/stop",            post(control_stop))
         .route("/control/clear-cache",     post(control_clear_cache))
         .route("/control/reload-commands", post(control_reload_commands))
-        // Dashboard settings form
-        .route("/dashboard/settings", post(dashboard_settings))
         // Public JSON API (health + stats do not expose secrets)
         .route("/health", get(health))
         .route("/api/stats", get(stats))
