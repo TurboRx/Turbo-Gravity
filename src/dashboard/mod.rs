@@ -44,10 +44,10 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
         // Discord OAuth2 flow
         .route("/auth/login", get(auth::login))
         .route("/auth/callback", get(auth::callback))
-        // Allow CORS requests from the same host on both HTTP and HTTPS.
-        // This covers local development (localhost) and cloud deployments where
-        // the browser and API share the same origin (same-origin requests bypass
-        // CORS entirely, so this layer mainly guards against cross-origin callers).
+        // Allow CORS requests from local HTTP origins (localhost/127.0.0.1).
+        // This is mainly for local development where the UI is served from a
+        // different HTTP port; in production/cloud same-origin setups, the
+        // browser bypasses CORS entirely, so this layer only affects cross-origin callers.
         .layer(
             CorsLayer::new()
                 .allow_origin([
