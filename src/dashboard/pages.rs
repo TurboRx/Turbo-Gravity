@@ -1758,6 +1758,17 @@ pub struct SettingsData {
     pub user_id:  String,
 }
 
+fn compute_initials(username: &str) -> String {
+    let initials: String = username
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p: &&str| !p.is_empty())
+        .take(2)
+        .filter_map(|p| p.chars().next())
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    if initials.is_empty() { "TG".to_string() } else { initials }
+}
+
 pub fn settings_page(data: &SettingsData) -> String {
     let head    = html_head("Settings", "");
     let sidebar = build_sidebar("Settings");
@@ -1768,14 +1779,7 @@ pub fn settings_page(data: &SettingsData) -> String {
     let user_id  = html_escape(&data.user_id);
 
     // Initials for the large profile avatar
-    let initials: String = data.username
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|p: &&str| !p.is_empty())
-        .take(2)
-        .filter_map(|p| p.chars().next())
-        .map(|c| c.to_ascii_uppercase())
-        .collect();
-    let initials = if initials.is_empty() { "TG".to_string() } else { initials };
+    let initials = compute_initials(&data.username);
 
     format!(
         r#"{head}
