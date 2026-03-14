@@ -585,6 +585,8 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
   .subgrid          { grid-template-columns: 1fr; }
   .module-grid      { grid-template-columns: 1fr 1fr; }
   .btn-actions      { flex-wrap: wrap; }
+  /* Prevent iOS Safari from auto-zooming when focusing inputs (font-size < 16px triggers zoom) */
+  input, select, textarea { font-size: 16px; }
 }
 
 /* ── Responsive: small mobile (≤ 480px) ─────────────────────────────────── */
