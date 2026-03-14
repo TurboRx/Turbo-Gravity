@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let mut cfg = config::load()?;
 
     // Allow the PORT environment variable to override the dashboard port.
-    // Cloud platforms such as Zeabur and Heroku set PORT to the port they route
+    // Cloud platforms can set PORT to the port they route
     // external traffic to; the app must listen on that port to be reachable.
     if let Ok(port_str) = std::env::var("PORT") {
         if let Ok(port) = port_str.parse::<u16>() {
