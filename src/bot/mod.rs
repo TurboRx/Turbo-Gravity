@@ -129,6 +129,9 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                     let online_status = map_online_status(&cfg.online_status);
                     ctx.set_presence(Some(activity), online_status);
 
+                    // Store the guild count so the dashboard can display it.
+                    state.guild_count.store(server_count, Ordering::Relaxed);
+
                     // Mark the bot as online now that the READY event has been received.
                     state.bot_online.store(true, Ordering::Relaxed);
 
