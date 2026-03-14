@@ -99,7 +99,7 @@ async fn root(State(state): State<SharedState>) -> Response {
 
 /// GET /dashboard — main control-panel page
 async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
-    let bot_status = if !state.config.bot.token.is_empty() {
+    let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
         "offline"
@@ -158,7 +158,7 @@ async fn setup_page(State(state): State<SharedState>) -> Response {
 
 /// GET /selector — guild selector page
 async fn selector_page(State(state): State<SharedState>) -> Html<String> {
-    let bot_status = if !state.config.bot.token.is_empty() {
+    let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
         "offline"
@@ -376,7 +376,7 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             // Signal the setup-mode dashboard to shut down so that main can
             // automatically start the bot without any manual intervention.
             state.setup_complete.notify_one();
-            Html(pages::setup_complete_page()).into_response()
+            Html(pages::setup_complete_page(port)).into_response()
         },
         Err(e) => {
             let data = ErrorData {
@@ -1040,6 +1040,49 @@ client_id = "123"
         assert_eq!(resp.status(), StatusCode::OK);
         let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
         assert!(ct.contains("text/html"), "expected text/html, got {ct}");
+    }
+
+    #[tokio::test]
+    async fn dashboard_shows_offline_when_bot_not_connected() {
+        // bot_online defaults to false → dashboard must show "offline"
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/dashboard")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        assert!(
+            text.contains("status-badge offline"),
+            "expected 'offline' status badge (class 'status-badge offline') when bot_online=false, got: {text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_shows_online_when_bot_connected() {
+        use std::sync::atomic::Ordering;
+
+        let state = test_state();
+        // Simulate the bot having received the READY event.
+        state.bot_online.store(true, Ordering::Relaxed);
+        let resp = public_router()
+            .with_state(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/dashboard")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let text = body_string(resp.into_body()).await;
+        assert!(
+            text.contains("status-badge online"),
+            "expected 'online' status badge (class 'status-badge online') when bot_online=true, got: {text}"
+        );
     }
 
     #[tokio::test]

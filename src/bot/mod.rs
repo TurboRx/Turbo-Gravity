@@ -1,6 +1,7 @@
 pub mod commands;
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use poise::serenity_prelude as serenity;
@@ -25,10 +26,12 @@ pub async fn start(state: SharedState) -> anyhow::Result<()> {
         match run_client(Arc::clone(&state)).await {
             Ok(()) => {
                 // Clean shutdown (e.g. SIGTERM) — don't retry.
+                state.bot_online.store(false, Ordering::Relaxed);
                 info!("Discord client exited cleanly.");
                 return Ok(());
             }
             Err(e) => {
+                state.bot_online.store(false, Ordering::Relaxed);
                 tracing::warn!(
                     "Discord client disconnected: {e}. Reconnecting in {retry_delay:?}…"
                 );
@@ -67,6 +70,16 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                             }
                         }
                     }
+                })
+            },
+            // Track Resume events so the dashboard reflects the real online status
+            // after a transparent gateway reconnect (no new READY is fired).
+            event_handler: |_ctx, event, _framework_ctx, data| {
+                Box::pin(async move {
+                    if let serenity::FullEvent::Resume { .. } = event {
+                        data.bot_online.store(true, Ordering::Relaxed);
+                    }
+                    Ok(())
                 })
             },
             ..Default::default()
@@ -115,6 +128,9 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                     let activity = presence_activity(cfg.presence_type, &presence_text);
                     let online_status = map_online_status(&cfg.online_status);
                     ctx.set_presence(Some(activity), online_status);
+
+                    // Mark the bot as online now that the READY event has been received.
+                    state.bot_online.store(true, Ordering::Relaxed);
 
                     // Return the Arc<AppState>; this becomes ctx.data() in every command
                     Ok(state)

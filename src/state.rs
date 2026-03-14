@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use mongodb::Client as MongoClient;
@@ -19,6 +20,10 @@ pub struct AppState {
     pub sessions: Mutex<HashMap<String, String>>,
     /// Pending OAuth2 CSRF states awaiting callback validation.
     pub oauth_states: Mutex<HashMap<String, ()>>,
+    /// Whether the Discord gateway connection is currently live.
+    /// Set to `true` on READY / Resume; reset to `false` when the connection
+    /// drops so the dashboard reflects the real bot status.
+    pub bot_online: AtomicBool,
 }
 
 impl AppState {
@@ -29,6 +34,7 @@ impl AppState {
             setup_complete: Notify::new(),
             sessions: Mutex::new(HashMap::new()),
             oauth_states: Mutex::new(HashMap::new()),
+            bot_online: AtomicBool::new(false),
         }
     }
 
