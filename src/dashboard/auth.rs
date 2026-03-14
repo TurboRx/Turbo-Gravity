@@ -60,7 +60,7 @@ fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> any
 /// Resolution order (first non-empty value wins):
 /// 1. `DISCORD_REDIRECT_URI` environment variable – explicit override, highest priority.
 /// 2. Auto-detection from `X-Forwarded-Proto` + `Host` request headers – works
-///    transparently on cloud platforms like Zeabur that sit behind a TLS-terminating
+///    transparently on cloud platforms that sit behind a TLS-terminating
 ///    reverse proxy; the resulting URL always points at `/auth/callback` on the
 ///    same host the browser used to reach the dashboard.
 /// 3. `config.dashboard.callback_url` – static fallback for bare-metal / local setups.
@@ -99,7 +99,7 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
 /// callback handler can verify it.
 ///
 /// The OAuth2 redirect URI is resolved dynamically from request headers so that
-/// the dashboard works correctly on cloud deployments (e.g. Zeabur) without
+/// the dashboard works correctly on cloud deployments without
 /// requiring manual configuration of `DISCORD_REDIRECT_URI`.
 pub async fn login(
     State(state): State<SharedState>,
