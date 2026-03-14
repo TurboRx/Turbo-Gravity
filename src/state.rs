@@ -1,11 +1,20 @@
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 
 use mongodb::Client as MongoClient;
 use tokio::sync::{Mutex, Notify};
 
 use crate::config::Config;
+
+/// Information stored per active dashboard session.
+#[derive(Clone)]
+pub struct SessionInfo {
+    /// Discord user ID (snowflake string).
+    pub user_id: String,
+    /// Discord username (e.g. "myname").
+    pub username: String,
+}
 
 /// Application-wide shared state threaded through Poise's `Data` type parameter
 /// and cloned into the Axum dashboard router via `Arc`.
@@ -14,16 +23,18 @@ pub struct AppState {
     pub db: Option<MongoClient>,
     /// Notified when the setup wizard successfully saves a configuration.
     /// The main entry point listens for this signal to stop the setup-mode
-    /// dashboard and automatically start the bot.
+    /// dashboard and automatically start the bot without any manual intervention.
     pub setup_complete: Notify,
-    /// Active dashboard sessions: session_id → Discord user ID.
-    pub sessions: Mutex<HashMap<String, String>>,
+    /// Active dashboard sessions: session_id → SessionInfo (user_id + username).
+    pub sessions: Mutex<HashMap<String, SessionInfo>>,
     /// Pending OAuth2 CSRF states awaiting callback validation.
     pub oauth_states: Mutex<HashMap<String, ()>>,
     /// Whether the Discord gateway connection is currently live.
     /// Set to `true` on READY / Resume; reset to `false` when the connection
     /// drops so the dashboard reflects the real bot status.
     pub bot_online: AtomicBool,
+    /// Number of guilds the bot is currently a member of (updated on READY).
+    pub guild_count: AtomicUsize,
 }
 
 impl AppState {
@@ -35,6 +46,7 @@ impl AppState {
             sessions: Mutex::new(HashMap::new()),
             oauth_states: Mutex::new(HashMap::new()),
             bot_online: AtomicBool::new(false),
+            guild_count: AtomicUsize::new(0),
         }
     }
 

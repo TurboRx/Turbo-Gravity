@@ -76,8 +76,33 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
             // after a transparent gateway reconnect (no new READY is fired).
             event_handler: |_ctx, event, _framework_ctx, data| {
                 Box::pin(async move {
-                    if let serenity::FullEvent::Resume { .. } = event {
-                        data.bot_online.store(true, Ordering::Relaxed);
+                    match event {
+                        serenity::FullEvent::Resume { .. } => {
+                            data.bot_online.store(true, Ordering::Relaxed);
+                        }
+                        // Bot joined a new guild — increment the live guild counter.
+                        // `is_new == Some(true)` distinguishes a genuine join from the
+                        // GUILD_CREATE bursts that Discord sends when the bot reconnects
+                        // (those have `is_new == Some(false)` when the cache is active).
+                        serenity::FullEvent::GuildCreate { is_new, .. } => {
+                            if *is_new == Some(true) {
+                                data.guild_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        // Bot left / was kicked from a guild — decrement the counter.
+                        // `incomplete.unavailable == true` means a temporary Discord
+                        // outage, not a leave; we ignore those to avoid drift.
+                        serenity::FullEvent::GuildDelete { incomplete, .. } => {
+                            if !incomplete.unavailable {
+                                // Saturating-sub: never let the counter wrap below 0.
+                                let _ = data.guild_count.fetch_update(
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                    |v| v.checked_sub(1),
+                                );
+                            }
+                        }
+                        _ => {}
                     }
                     Ok(())
                 })
@@ -128,6 +153,9 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                     let activity = presence_activity(cfg.presence_type, &presence_text);
                     let online_status = map_online_status(&cfg.online_status);
                     ctx.set_presence(Some(activity), online_status);
+
+                    // Store the guild count so the dashboard can display it.
+                    state.guild_count.store(server_count, Ordering::Relaxed);
 
                     // Mark the bot as online now that the READY event has been received.
                     state.bot_online.store(true, Ordering::Relaxed);

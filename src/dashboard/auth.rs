@@ -23,7 +23,7 @@ use oauth2::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::state::SharedState;
+use crate::state::{SessionInfo, SharedState};
 
 // ---------------------------------------------------------------------------
 // OAuth2 client helpers
@@ -249,7 +249,10 @@ pub async fn callback(
                 sessions.remove(&oldest);
             }
         }
-        sessions.insert(session_id.clone(), discord_user.id.clone());
+        sessions.insert(session_id.clone(), SessionInfo {
+            user_id: discord_user.id.clone(),
+            username: discord_user.username.clone(),
+        });
     }
 
     tracing::info!("Admin {} ({}) logged in successfully", discord_user.username, discord_user.id);
@@ -263,6 +266,46 @@ pub async fn callback(
         [
             (header::LOCATION, "/dashboard".to_string()),
             (header::SET_COOKIE, cookie),
+        ],
+    )
+        .into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Logout handler
+// ---------------------------------------------------------------------------
+
+/// `POST /auth/logout` — invalidate the current session and redirect to /auth/login.
+pub async fn logout(
+    State(state): State<SharedState>,
+    request: axum::extract::Request,
+) -> Response {
+    // Extract session_id from the Cookie header and remove it from the store.
+    let session_id = request
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|raw| {
+            raw.split(';').find_map(|c| {
+                let c = c.trim();
+                c.strip_prefix("session_id=").map(str::to_string)
+            })
+        });
+
+    if let Some(sid) = session_id {
+        state.sessions.lock().await.remove(&sid);
+    }
+
+    // Clear the session cookie and redirect to login.
+    // Note: the Secure flag is intentionally kept consistent with the login cookie
+    // (set in the callback handler). In non-HTTPS environments the cookie should
+    // not have been sent at all, so the Max-Age=0 expiry covers HTTP-only deploys.
+    let clear_cookie = "session_id=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0";
+    (
+        StatusCode::FOUND,
+        [
+            (header::LOCATION, "/auth/login".to_string()),
+            (header::SET_COOKIE, clear_cookie.to_string()),
         ],
     )
         .into_response()
@@ -309,7 +352,7 @@ pub async fn require_admin(
     // Look up the session.
     let user_id = {
         let sessions = state.sessions.lock().await;
-        sessions.get(&session_id).cloned()
+        sessions.get(&session_id).map(|s| s.user_id.clone())
     };
 
     let user_id = match user_id {
@@ -348,8 +391,74 @@ pub async fn require_admin(
 }
 
 // ---------------------------------------------------------------------------
+// Login-redirect middleware (protects HTML dashboard pages)
+// ---------------------------------------------------------------------------
+
+/// Middleware that ensures the request has a valid session.
+///
+/// Unlike [`require_admin`] (which returns JSON errors for API routes), this
+/// middleware issues an HTML redirect to `/auth/login` so the browser shows
+/// the Discord login page instead of a raw JSON error.
+///
+/// Call this on routes that serve HTML pages (e.g., `/dashboard`, `/selector`).
+pub async fn require_login_redirect(
+    State(state): State<SharedState>,
+    request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    // Extract session_id from cookie.
+    let session_id = extract_session_id(request.headers());
+
+    let session_id = match session_id {
+        Some(id) => id,
+        None => {
+            return (StatusCode::FOUND, [(header::LOCATION, "/auth/login")])
+                .into_response();
+        }
+    };
+
+    let valid = {
+        let sessions = state.sessions.lock().await;
+        sessions.contains_key(&session_id)
+    };
+
+    if !valid {
+        return (StatusCode::FOUND, [(header::LOCATION, "/auth/login")]).into_response();
+    }
+
+    next.run(request).await
+}
+
+/// Extract the [`SessionInfo`] for the current request, or `None` if the
+/// session cookie is absent or does not correspond to a known session.
+///
+/// This is a convenience helper for route handlers that need the logged-in
+/// user's information (e.g., to display the username in the topbar).
+pub async fn current_session(
+    state: &crate::state::AppState,
+    headers: &axum::http::HeaderMap,
+) -> Option<crate::state::SessionInfo> {
+    let session_id = extract_session_id(headers)?;
+
+    state.sessions.lock().await.get(&session_id).cloned()
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Extract the `session_id` from the `Cookie` header, if present.
+fn extract_session_id(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|raw| {
+            raw.split(';').find_map(|c| {
+                let c = c.trim();
+                c.strip_prefix("session_id=").map(str::to_string)
+            })
+        })
+}
 
 /// Generate a cryptographically random 32-byte session ID, hex-encoded (64 chars).
 fn generate_session_id() -> String {
@@ -443,7 +552,10 @@ port = 8080
             .sessions
             .lock()
             .await
-            .insert("valid_session".to_string(), "999999".to_string());
+            .insert("valid_session".to_string(), crate::state::SessionInfo {
+                user_id: "999999".to_string(),
+                username: "testuser".to_string(),
+            });
         // ADMIN_DISCORD_ID is not set, so "999999" will never match.
         let resp = guarded_app(Arc::clone(&state))
             .oneshot(
@@ -473,7 +585,10 @@ port = 8080
             .sessions
             .lock()
             .await
-            .insert("admin_session".to_string(), admin_id.to_string());
+            .insert("admin_session".to_string(), crate::state::SessionInfo {
+                user_id: admin_id.to_string(),
+                username: "admin".to_string(),
+            });
 
         // Set the env var so the middleware can verify the admin
         std::env::set_var("ADMIN_DISCORD_ID", admin_id);

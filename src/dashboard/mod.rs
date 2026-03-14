@@ -25,18 +25,25 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let bind_addr = format!("0.0.0.0:{port}");
 
     // Build protected sub-routers.
-    // The require_admin middleware validates the session cookie and ensures only
-    // the configured ADMIN_DISCORD_ID can reach these routes.
+    // require_admin validates the session cookie and ensures only the
+    // configured ADMIN_DISCORD_ID can reach sensitive API routes.
     let admin_guard = axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_admin);
+    // require_login_redirect protects HTML pages: redirects unauthenticated
+    // visitors to /auth/login rather than returning a JSON error.
+    let login_guard = axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_login_redirect);
 
     let config_routes = routes::config_router()
         .route_layer(admin_guard.clone());
     let admin_routes = routes::admin_router()
         .route_layer(admin_guard);
+    let protected_pages = routes::protected_html_router()
+        .route_layer(login_guard);
 
     let app = Router::new()
-        // Public routes (setup wizard, dashboard pages, health, control, etc.)
+        // Public routes (setup wizard, health, control, etc.)
         .merge(routes::public_router())
+        // Protected HTML pages (/dashboard, /selector, /settings)
+        .merge(protected_pages)
         // Protected /api/config/* routes (backup, restore, config view)
         .nest("/api/config", config_routes)
         // Protected admin routes (/dashboard/settings, etc.)

@@ -150,24 +150,52 @@ input, select, textarea { font-family: inherit; }
 }
 .search-box::placeholder { color: var(--text3); }
 .search-box:focus { border-color: var(--purple); }
-.notif-btn, .theme-btn {
+.theme-btn {
   background: var(--bg3); border: 1px solid var(--border);
   border-radius: 8px; width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   color: var(--text2); font-size: 15px; position: relative;
   transition: background 0.15s, color 0.15s;
 }
-.notif-btn:hover, .theme-btn:hover { background: rgba(124,58,237,0.15); color: var(--text); }
-.notif-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
-  position: absolute; top: 6px; right: 6px;
-}
+.theme-btn:hover { background: rgba(124,58,237,0.15); color: var(--text); }
 .avatar {
   width: 36px; height: 36px; border-radius: 50%;
   background: linear-gradient(135deg, var(--purple), var(--cyan));
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 12px; color: #fff; cursor: pointer;
+  font-weight: 700; font-size: 12px; color: #fff; flex-shrink: 0;
 }
+
+/* ── Profile menu ────────────────────────────────────────────────────────── */
+.profile-menu-wrap { position: relative; }
+.profile-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 10px; padding: 4px 10px 4px 4px;
+  color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.profile-btn:hover { background: rgba(124,58,237,0.1); border-color: var(--purple); }
+.profile-name { font-size: 13px; font-weight: 500; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-dropdown {
+  display: none; position: absolute; right: 0; top: calc(100% + 6px);
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow); min-width: 210px;
+  z-index: 200; padding: 8px;
+}
+.profile-dropdown.open { display: block; }
+.profile-dropdown-user { display: flex; align-items: center; gap: 10px; padding: 6px 8px 10px; }
+.profile-dropdown-sep { border-top: 1px solid var(--border); margin: 4px 0; }
+.profile-dropdown-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 10px; border-radius: 8px;
+  font-size: 13px; color: var(--text); background: none; border: none;
+  cursor: pointer; text-align: left;
+  transition: background 0.12s;
+}
+.profile-dropdown-item:hover { background: rgba(124,58,237,0.1); }
+.profile-dropdown-logout { color: var(--red); }
+.profile-dropdown-logout:hover { background: rgba(239,68,68,0.08); }
+.profile-dropdown-form { margin: 0; }
 
 /* ── Content area ────────────────────────────────────────────────────────── */
 .content { padding: 24px; flex: 1; }
@@ -467,7 +495,7 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 
 /* ── Ensure minimum 44×44 px tap targets on all interactive elements ─────── */
 .btn            { min-height: 44px; padding: 0 16px; }
-.notif-btn, .theme-btn { width: 44px; height: 44px; }
+.theme-btn { width: 44px; height: 44px; }
 .guild-select-btn { min-height: 44px; }
 .setup-submit   { min-height: 44px; }
 
@@ -735,6 +763,72 @@ function restoreConfig(input) {
     })
     .finally(function() { input.value = ''; });
 }
+
+/* ── Profile dropdown toggle ────────────────────────────────────────────── */
+function toggleProfileMenu() {
+  var dd = document.getElementById('profile-dropdown');
+  if (!dd) return;
+  dd.classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  var wrap = document.querySelector('.profile-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var dd = document.getElementById('profile-dropdown');
+    if (dd) dd.classList.remove('open');
+  }
+});
+
+/* ── Auto-refresh: poll /api/bot/status every 30 seconds ────────────────── */
+(function() {
+  // Records when the auto-refresh script started (used for session uptime display).
+  var refreshStartTime = Date.now();
+
+  function updateBotStatus(online, guildCount) {
+    // Update status badge
+    var badge = document.getElementById('live-status-badge');
+    if (badge) {
+      badge.className = 'status-badge ' + (online ? 'online' : 'offline');
+      badge.innerHTML = '<span class="status-dot"></span>' + (online ? 'online' : 'offline');
+    }
+    // Update guild count
+    var gc = document.getElementById('live-guild-count');
+    if (gc) gc.textContent = guildCount;
+    // Update last-updated badge
+    var lu = document.getElementById('analytics-last-updated');
+    if (lu) {
+      var now = new Date();
+      lu.textContent = 'Updated ' + now.getHours().toString().padStart(2,'0') + ':' +
+                       now.getMinutes().toString().padStart(2,'0') + ':' +
+                       now.getSeconds().toString().padStart(2,'0');
+    }
+    // Update uptime display
+    var uptimeEl = document.getElementById('live-uptime');
+    var uptimeBar = document.getElementById('live-uptime-bar');
+    if (uptimeEl && online) {
+      var secs = Math.floor((Date.now() - refreshStartTime) / 1000);
+      var h = Math.floor(secs / 3600);
+      var m = Math.floor((secs % 3600) / 60);
+      var s = secs % 60;
+      uptimeEl.textContent = 'Tab open: ' + (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
+      if (uptimeBar) uptimeBar.style.width = '100%';
+    } else if (uptimeEl) {
+      uptimeEl.textContent = 'offline';
+      if (uptimeBar) uptimeBar.style.width = '0%';
+    }
+  }
+
+  function refreshStatus() {
+    fetch('/api/bot/status', { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { updateBotStatus(d.online, d.guild_count); })
+      .catch(function() { /* ignore refresh errors silently */ });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    refreshStatus();
+    setInterval(refreshStatus, 30000);
+  });
+})();
 </script>"#;
 
 // ---------------------------------------------------------------------------
@@ -764,11 +858,9 @@ fn html_head(title: &str, extra_script: &str) -> String {
 
 fn build_sidebar(active: &str) -> String {
     let items: &[(&str, &str, &str)] = &[
-        ("home",          "Home",      "/dashboard"),
-        ("bar_chart",     "Analytics", "/dashboard"),
-        ("dns",           "Servers",   "/selector"),
-        ("extension",     "Modules",   "/dashboard"),
-        ("settings",      "Settings",  "/setup"),
+        ("home",     "Home",     "/dashboard"),
+        ("dns",      "Servers",  "/selector"),
+        ("settings", "Settings", "/settings"),
     ];
     let nav: String = items
         .iter()
@@ -793,7 +885,18 @@ fn build_sidebar(active: &str) -> String {
     )
 }
 
-fn build_topbar(page_name: &str) -> String {
+fn build_topbar(page_name: &str, username: &str) -> String {
+    // Generate initials from the username (up to 2 chars, uppercase).
+    let initials: String = username
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p: &&str| !p.is_empty())
+        .take(2)
+        .filter_map(|p| p.chars().next())
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    let initials = if initials.is_empty() { "TG".to_string() } else { initials };
+    let username_e = html_escape(username);
+
     format!(
         r#"<header class="topbar">
   <div class="topbar-left">
@@ -806,12 +909,40 @@ fn build_topbar(page_name: &str) -> String {
   </div>
   <div class="topbar-right">
     <input class="search-box" type="text" placeholder="Search&#x2026;" aria-label="Search" />
-    <button class="notif-btn" title="Notifications" aria-label="Notifications"><span class="material-symbols-rounded mi-topbar">notifications</span><span class="notif-dot"></span></button>
     <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><span class="material-symbols-rounded mi-topbar">dark_mode</span></button>
-    <div class="avatar">TG</div>
+    <div class="profile-menu-wrap">
+      <button class="profile-btn" onclick="toggleProfileMenu()" aria-label="Profile menu" title="{username_e}">
+        <div class="avatar">{initials}</div>
+        <span class="profile-name">{username_e}</span>
+        <span class="material-symbols-rounded mi-topbar" style="font-size:14px;opacity:0.7">expand_more</span>
+      </button>
+      <div class="profile-dropdown" id="profile-dropdown">
+        <div class="profile-dropdown-user">
+          <div class="avatar" style="width:32px;height:32px;font-size:13px">{initials}</div>
+          <div>
+            <div style="font-weight:600;font-size:13px">{username_e}</div>
+            <div style="font-size:11px;color:var(--text3)">Discord Account</div>
+          </div>
+        </div>
+        <div class="profile-dropdown-sep"></div>
+        <a class="profile-dropdown-item" href="/settings">
+          <span class="material-symbols-rounded" style="font-size:16px">manage_accounts</span>
+          Profile &amp; Settings
+        </a>
+        <form method="POST" action="/auth/logout" class="profile-dropdown-form">
+          <button type="submit" class="profile-dropdown-item profile-dropdown-logout">
+            <span class="material-symbols-rounded" style="font-size:16px">logout</span>
+            Log Out
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
 </header>
-"#
+"#,
+        page_name = page_name,
+        username_e = username_e,
+        initials = initials,
     )
 }
 
@@ -832,12 +963,16 @@ pub struct DashboardData {
     pub online_status:      String,
     pub presence_text:      String,
     pub presence_type:      u8,
+    /// Number of guilds the bot is currently in (from state, updated on READY).
+    pub guild_count:        usize,
+    /// Discord username of the logged-in admin (shown in topbar).
+    pub username:           String,
 }
 
 pub fn dashboard_page(data: &DashboardData) -> String {
     let head          = html_head("Dashboard", DASHBOARD_SCRIPT);
     let sidebar       = build_sidebar("Home");
-    let topbar        = build_topbar("Dashboard");
+    let topbar        = build_topbar("Dashboard", &data.username);
     let foot          = html_foot();
 
     let status_class  = if data.bot_status == "online" { "online" } else { "offline" };
@@ -862,6 +997,8 @@ pub fn dashboard_page(data: &DashboardData) -> String {
     let pp3 = if data.presence_type == 3 { " selected" } else { "" };
     let pp4 = if data.presence_type == 4 { " selected" } else { "" };
 
+    let guild_count_str = data.guild_count.to_string();
+
     format!(
         r##"{head}
 <div class="layout">
@@ -875,45 +1012,23 @@ pub fn dashboard_page(data: &DashboardData) -> String {
     <!-- ── Left column ──────────────────────────────────────────────── -->
     <div class="col-left">
 
-      <!-- Server Analytics -->
+      <!-- Server Analytics (live data polled via /api/bot/status) -->
       <div class="card">
         <div class="card-header">
           <span class="card-title"><span class="material-symbols-rounded mi-card">show_chart</span> Server Analytics</span>
-          <span class="card-badge">Last 30 days</span>
+          <span class="card-badge" id="analytics-last-updated">Live</span>
         </div>
-        <div class="chart-wrap">
-          <svg viewBox="0 0 400 140" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="purpleArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.35"/>
-                <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-              </linearGradient>
-              <linearGradient id="cyanArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
-                <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <line x1="0" y1="35"  x2="400" y2="35"  stroke="#1f2544" stroke-width="1"/>
-            <line x1="0" y1="70"  x2="400" y2="70"  stroke="#1f2544" stroke-width="1"/>
-            <line x1="0" y1="105" x2="400" y2="105" stroke="#1f2544" stroke-width="1"/>
-            <path d="M0,112 C50,108 100,98 150,88 C200,78 250,65 300,52 C350,40 380,33 400,30 L400,140 L0,140 Z"
-                  fill="url(#purpleArea)"/>
-            <path d="M0,125 C50,120 100,115 150,105 C200,92 250,74 300,52 C350,32 380,22 400,18 L400,140 L0,140 Z"
-                  fill="url(#cyanArea)"/>
-            <path d="M0,112 C50,108 100,98 150,88 C200,78 250,65 300,52 C350,40 380,33 400,30"
-                  fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M0,125 C50,120 100,115 150,105 C200,92 250,74 300,52 C350,32 380,22 400,18"
-                  fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <div class="chart-legend">
-          <div class="legend-item">
-            <span class="legend-dot" style="background:#7c3aed"></span>
-            Member growth
+        <div class="subgrid" style="margin-top:12px">
+          <div class="subcard">
+            <div class="subcard-title">Bot Status</div>
+            <div id="live-bot-status">
+              <span class="status-badge {status_class}" id="live-status-badge">{status_dot}{status_text}</span>
+            </div>
           </div>
-          <div class="legend-item">
-            <span class="legend-dot" style="background:#06b6d4"></span>
-            Message activity
+          <div class="subcard">
+            <div class="subcard-title">Servers</div>
+            <div class="uptime-val" id="live-guild-count" style="font-size:28px">{guild_count_str}</div>
+            <div class="uptime-label">guilds connected</div>
           </div>
         </div>
       </div>
@@ -937,21 +1052,20 @@ pub fn dashboard_page(data: &DashboardData) -> String {
             <strong>Server Details</strong><br/>
             Guild ID: {guild_id}<br/>
             Status: {status_text}<br/>
-            Region: Auto
+            Guilds: {guild_count_str}
           </div>
         </div>
         <div class="subcard" data-popover="true" title="Tap for details">
           <div class="subcard-title">Uptime</div>
-          <div class="uptime-val">99.9%</div>
-          <div class="uptime-label">Last 30 days</div>
+          <div class="uptime-val" id="live-uptime">—</div>
+          <div class="uptime-label">session uptime</div>
           <div class="uptime-bar-wrap">
-            <div class="uptime-bar" style="width:99.9%"></div>
+            <div class="uptime-bar" id="live-uptime-bar" style="width:0%"></div>
           </div>
           <div class="stats-popover">
-            <strong>Uptime Stats</strong><br/>
-            30-day: 99.9%<br/>
-            7-day: 100%<br/>
-            Incidents: 0
+            <strong>Session Stats</strong><br/>
+            Auto-refreshes every 30 s.<br/>
+            Uptime shown since page load.
           </div>
         </div>
       </div>
@@ -1469,15 +1583,17 @@ pub struct GuildInfo {
 }
 
 pub struct SelectorData {
-    pub username:   String,
-    pub guilds:     Vec<GuildInfo>,
-    pub bot_status: &'static str,
+    pub username:    String,
+    pub guilds:      Vec<GuildInfo>,
+    pub bot_status:  &'static str,
+    /// Number of guilds from bot state (for display when guild list is empty).
+    pub guild_count: usize,
 }
 
 pub fn selector_page(data: &SelectorData) -> String {
     let head    = html_head("Select Server", "");
     let sidebar = build_sidebar("Servers");
-    let topbar  = build_topbar("Select Server");
+    let topbar  = build_topbar("Select Server", &data.username);
     let foot    = html_foot();
 
     let status_class = if data.bot_status == "online" { "online" } else { "offline" };
@@ -1547,7 +1663,7 @@ pub fn selector_page(data: &SelectorData) -> String {
 </div>
 </div>
 {foot}"#,
-        bot_status = html_escape(data.bot_status),
+        bot_status  = html_escape(data.bot_status),
     )
 }
 
@@ -1636,6 +1752,102 @@ pub fn setup_complete_page(dashboard_port: u16) -> String {
   </div>
 </div>
 {foot}"#
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Settings / profile page
+// ---------------------------------------------------------------------------
+
+pub struct SettingsData {
+    pub username: String,
+    pub user_id:  String,
+}
+
+fn compute_initials(username: &str) -> String {
+    let initials: String = username
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p: &&str| !p.is_empty())
+        .take(2)
+        .filter_map(|p| p.chars().next())
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    if initials.is_empty() { "TG".to_string() } else { initials }
+}
+
+pub fn settings_page(data: &SettingsData) -> String {
+    let head    = html_head("Settings", "");
+    let sidebar = build_sidebar("Settings");
+    let topbar  = build_topbar("Settings", &data.username);
+    let foot    = html_foot();
+
+    let username = html_escape(&data.username);
+    let user_id  = html_escape(&data.user_id);
+
+    // Initials for the large profile avatar
+    let initials = compute_initials(&data.username);
+
+    format!(
+        r#"{head}
+<div class="layout">
+{sidebar}
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div class="main-wrapper">
+{topbar}
+<main class="content">
+  <div class="dashboard-grid" style="max-width:700px;margin:0 auto">
+
+    <div class="col-left" style="grid-column:1/-1">
+
+      <!-- Profile Card -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">manage_accounts</span> Profile</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;padding:8px 0 16px">
+          <div class="avatar" style="width:56px;height:56px;font-size:22px;flex-shrink:0">{initials}</div>
+          <div>
+            <div style="font-size:18px;font-weight:700;color:var(--text1)">{username}</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Discord ID: {user_id}</div>
+            <div style="font-size:12px;color:var(--green);margin-top:4px;display:flex;align-items:center;gap:4px">
+              <span class="material-symbols-rounded" style="font-size:14px">verified</span>
+              Authenticated via Discord OAuth2
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Actions -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><span class="material-symbols-rounded mi-card">security</span> Account Actions</span>
+        </div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">
+          You are logged in as <strong>{username}</strong>. Log out to end your session.
+        </p>
+        <div class="btn-actions">
+          <form method="POST" action="/auth/logout">
+            <button type="submit" class="btn btn-danger">
+              <span class="material-symbols-rounded mi-btn">logout</span>
+              Log Out
+            </button>
+          </form>
+          <a class="btn btn-ghost" href="/dashboard">
+            <span class="material-symbols-rounded mi-btn">arrow_back</span>
+            Back to Dashboard
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+</div>
+</div>
+{foot}"#,
+        initials = initials,
+        username = username,
+        user_id  = user_id,
     )
 }
 

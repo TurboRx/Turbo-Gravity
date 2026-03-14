@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
     extract::{Multipart, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Json, Response},
     routing::get,
     Form, Router,
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::SharedState;
 use super::pages::{
-    self, DashboardData, ErrorData, SelectorData, SetupData,
+    self, DashboardData, ErrorData, SelectorData, SetupData, SettingsData,
 };
 
 // ---------------------------------------------------------------------------
@@ -34,6 +34,13 @@ pub struct StatsResponse {
 // JSON API handlers
 // ---------------------------------------------------------------------------
 
+/// Live bot status response (used for auto-refresh polling)
+#[derive(Serialize)]
+pub struct BotStatusResponse {
+    pub online: bool,
+    pub guild_count: usize,
+}
+
 /// GET /health — simple liveness check
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
@@ -48,6 +55,16 @@ async fn stats(State(state): State<SharedState>) -> Json<StatsResponse> {
         bot_configured: !state.config.bot.token.is_empty(),
         database_connected: state.db.is_some(),
         dashboard_port: state.config.dashboard.port,
+    })
+}
+
+/// GET /api/bot/status — live bot status (online flag + guild count).
+///
+/// Polled by the dashboard auto-refresh script every 30 seconds.
+async fn bot_status(State(state): State<SharedState>) -> Json<BotStatusResponse> {
+    Json(BotStatusResponse {
+        online: state.bot_online.load(std::sync::atomic::Ordering::Relaxed),
+        guild_count: state.guild_count.load(std::sync::atomic::Ordering::Relaxed),
     })
 }
 
@@ -98,12 +115,16 @@ async fn root(State(state): State<SharedState>) -> Response {
 }
 
 /// GET /dashboard — main control-panel page
-async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
+async fn dashboard_page(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Html<String> {
     let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
         "offline"
     };
+    let guild_count = state.guild_count.load(std::sync::atomic::Ordering::Relaxed);
     let permissions = "8".to_string();
     let invite_link = if !state.config.bot.client_id.is_empty() {
         format!(
@@ -113,6 +134,11 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
     } else {
         "#".to_string()
     };
+    // Extract the logged-in username from the session cookie (best-effort).
+    let username = super::auth::current_session(&state, &headers)
+        .await
+        .map(|s| s.username)
+        .unwrap_or_else(|| "Admin".to_string());
     let data = DashboardData {
         bot_status,
         command_scope: state.config.bot.command_scope.clone(),
@@ -122,6 +148,8 @@ async fn dashboard_page(State(state): State<SharedState>) -> Html<String> {
         online_status: state.config.bot.online_status.clone(),
         presence_text: state.config.bot.presence_text.clone(),
         presence_type: state.config.bot.presence_type,
+        guild_count,
+        username,
     };
     Html(pages::dashboard_page(&data))
 }
@@ -157,18 +185,40 @@ async fn setup_page(State(state): State<SharedState>) -> Response {
 }
 
 /// GET /selector — guild selector page
-async fn selector_page(State(state): State<SharedState>) -> Html<String> {
+async fn selector_page(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Html<String> {
     let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
         "offline"
     };
+    let username = super::auth::current_session(&state, &headers)
+        .await
+        .map(|s| s.username)
+        .unwrap_or_else(|| "Admin".to_string());
+    let guild_count = state.guild_count.load(std::sync::atomic::Ordering::Relaxed);
     let data = SelectorData {
-        username: "Admin".to_string(),
+        username,
         guilds: vec![],
         bot_status,
+        guild_count,
     };
     Html(pages::selector_page(&data))
+}
+
+/// GET /settings — user profile & logout page
+async fn settings_page(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Html<String> {
+    let session = super::auth::current_session(&state, &headers).await;
+    let (username, user_id) = session
+        .map(|s| (s.username, s.user_id))
+        .unwrap_or_else(|| ("Admin".to_string(), String::new()));
+    let data = SettingsData { username, user_id };
+    Html(pages::settings_page(&data))
 }
 
 /// Fallback handler — renders the HTML error page
@@ -747,21 +797,20 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 
 /// Build the public Axum router (routes that do NOT require authentication).
 ///
-/// The `/api/config/*` routes and `/dashboard/settings` live in [`config_router`]
-/// and are composed with the admin auth middleware in `dashboard::serve()`.
+/// Protected HTML pages (`/dashboard`, `/selector`, `/settings`) live in
+/// [`protected_html_router`] and are wrapped with the `require_login_redirect`
+/// middleware in `dashboard::serve()`.
 pub fn public_router() -> Router<SharedState> {
     use axum::routing::post;
     Router::new()
         // Static assets
         .route("/styles.css", get(styles))
-        // HTML pages
+        // HTML pages (unprotected)
         .route("/", get(root))
-        .route("/dashboard", get(dashboard_page))
         // /setup is only usable during initial setup mode (no bot token configured).
         // The handler itself redirects to /dashboard once setup is complete so
         // that bot secrets are never exposed to unauthenticated visitors.
         .route("/setup", get(setup_page).post(setup_submit))
-        .route("/selector", get(selector_page))
         // Dashboard quick-action controls (JSON responses)
         .route("/control/restart",         post(control_restart))
         .route("/control/stop",            post(control_stop))
@@ -770,7 +819,22 @@ pub fn public_router() -> Router<SharedState> {
         // Public JSON API (health + stats do not expose secrets)
         .route("/health", get(health))
         .route("/api/stats", get(stats))
+        .route("/api/bot/status", get(bot_status))
+        // POST /auth/logout — clears the session cookie (public, no session needed)
+        .route("/auth/logout", post(super::auth::logout))
         .fallback(not_found)
+}
+
+/// Build the router for HTML pages that require a valid Discord session.
+///
+/// These routes are wrapped with the `require_login_redirect` middleware in
+/// `dashboard::serve()` so that unauthenticated visitors are redirected to
+/// `/auth/login` instead of seeing a JSON error.
+pub fn protected_html_router() -> Router<SharedState> {
+    Router::new()
+        .route("/dashboard", get(dashboard_page))
+        .route("/selector", get(selector_page))
+        .route("/settings", get(settings_page))
 }
 
 /// Build the router for admin-only sub-routes.
@@ -842,7 +906,10 @@ port = 8080
     }
 
     fn test_app() -> axum::Router {
-        public_router().with_state(test_state())
+        let state = test_state();
+        public_router()
+            .merge(protected_html_router())
+            .with_state(state)
     }
 
     /// Full app including config routes (without auth middleware) for unit
@@ -850,6 +917,7 @@ port = 8080
     fn full_test_app() -> axum::Router {
         let state = test_state();
         public_router()
+            .merge(protected_html_router())
             .nest("/api/config", config_router())
             .with_state(state)
     }
@@ -1069,6 +1137,7 @@ client_id = "123"
         // Simulate the bot having received the READY event.
         state.bot_online.store(true, Ordering::Relaxed);
         let resp = public_router()
+            .merge(protected_html_router())
             .with_state(state)
             .oneshot(
                 Request::builder()
