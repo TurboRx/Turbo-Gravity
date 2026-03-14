@@ -29,15 +29,16 @@ use crate::state::{SessionInfo, SharedState};
 // OAuth2 client helpers
 // ---------------------------------------------------------------------------
 
-/// Build a Discord OAuth2 [`BasicClient`] from environment variables, falling
-/// back to the values stored in the application config when an env var is absent.
-fn build_oauth_client(state: &crate::state::AppState) -> anyhow::Result<(BasicClient, String)> {
+/// Build a Discord OAuth2 [`BasicClient`] using the supplied `redirect_uri`.
+///
+/// The `client_id` and `client_secret` are read from env vars first
+/// (`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`), falling back to the values
+/// stored in the application config.
+fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> anyhow::Result<BasicClient> {
     let client_id = std::env::var("DISCORD_CLIENT_ID")
         .unwrap_or_else(|_| state.config.bot.client_id.clone());
     let client_secret = std::env::var("DISCORD_CLIENT_SECRET")
         .unwrap_or_else(|_| state.config.dashboard.client_secret.clone());
-    let redirect_uri = std::env::var("DISCORD_REDIRECT_URI")
-        .unwrap_or_else(|_| state.config.dashboard.callback_url.clone());
 
     anyhow::ensure!(!client_id.is_empty(), "DISCORD_CLIENT_ID is not configured");
     anyhow::ensure!(!client_secret.is_empty(), "DISCORD_CLIENT_SECRET is not configured");
@@ -49,9 +50,44 @@ fn build_oauth_client(state: &crate::state::AppState) -> anyhow::Result<(BasicCl
         AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string())?,
         Some(TokenUrl::new("https://discord.com/api/oauth2/token".to_string())?),
     )
-    .set_redirect_uri(RedirectUrl::new(redirect_uri.clone())?);
+    .set_redirect_uri(RedirectUrl::new(redirect_uri.to_string())?);
 
-    Ok((client, redirect_uri))
+    Ok(client)
+}
+
+/// Determine the OAuth2 redirect URI for the current request.
+///
+/// Resolution order (first non-empty value wins):
+/// 1. `DISCORD_REDIRECT_URI` environment variable – explicit override, highest priority.
+/// 2. Auto-detection from `X-Forwarded-Proto` + `Host` request headers – works
+///    transparently on cloud platforms like Zeabur that sit behind a TLS-terminating
+///    reverse proxy; the resulting URL always points at `/auth/callback` on the
+///    same host the browser used to reach the dashboard.
+/// 3. `config.dashboard.callback_url` – static fallback for bare-metal / local setups.
+fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
+    // 1. Explicit env-var override.
+    if let Ok(uri) = std::env::var("DISCORD_REDIRECT_URI") {
+        if !uri.is_empty() {
+            return uri;
+        }
+    }
+
+    // 2. Auto-detect from request headers.
+    //    X-Forwarded-Proto may contain a comma-separated list when there are
+    //    multiple proxies; take only the first (outermost) value.
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "http".to_string());
+
+    if let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) {
+        return format!("{scheme}://{host}/auth/callback");
+    }
+
+    // 3. Static config fallback.
+    state.config.dashboard.callback_url.clone()
 }
 
 // ---------------------------------------------------------------------------
@@ -61,8 +97,17 @@ fn build_oauth_client(state: &crate::state::AppState) -> anyhow::Result<(BasicCl
 /// `GET /auth/login` – generate a Discord authorization URL and redirect the
 /// browser to it.  A CSRF state token is stored in server memory so that the
 /// callback handler can verify it.
-pub async fn login(State(state): State<SharedState>) -> Response {
-    let (client, _) = match build_oauth_client(&state) {
+///
+/// The OAuth2 redirect URI is resolved dynamically from request headers so that
+/// the dashboard works correctly on cloud deployments (e.g. Zeabur) without
+/// requiring manual configuration of `DISCORD_REDIRECT_URI`.
+pub async fn login(
+    State(state): State<SharedState>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    let redirect_uri = detect_redirect_uri(&state, &headers);
+
+    let client = match build_oauth_client(&state, &redirect_uri) {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("OAuth2 client configuration error: {e}");
@@ -79,7 +124,8 @@ pub async fn login(State(state): State<SharedState>) -> Response {
         .add_scope(Scope::new("identify".to_string()))
         .url();
 
-    // Persist the CSRF state so the callback can validate it.
+    // Persist the CSRF state along with the redirect URI so the callback
+    // handler can perform the token exchange with the exact same URI.
     {
         let mut states = state.oauth_states.lock().await;
         // Evict one arbitrary entry to prevent unbounded growth without
@@ -89,7 +135,7 @@ pub async fn login(State(state): State<SharedState>) -> Response {
                 states.remove(&evicted_key);
             }
         }
-        states.insert(csrf_token.secret().clone(), ());
+        states.insert(csrf_token.secret().clone(), redirect_uri);
     }
 
     tracing::info!("OAuth2 login initiated, redirecting to Discord");
@@ -128,18 +174,21 @@ pub async fn callback(
     Query(params): Query<CallbackParams>,
 ) -> Response {
     // --- 1. Validate CSRF state --------------------------------------------
-    let state_valid = {
+    let redirect_uri = {
         let mut states = state.oauth_states.lock().await;
-        states.remove(&params.state).is_some()
+        states.remove(&params.state)
     };
 
-    if !state_valid {
-        tracing::warn!("OAuth2 callback received invalid or expired CSRF state");
-        return (StatusCode::BAD_REQUEST, "Invalid or expired CSRF state. Please try logging in again.").into_response();
-    }
+    let redirect_uri = match redirect_uri {
+        Some(uri) => uri,
+        None => {
+            tracing::warn!("OAuth2 callback received invalid or expired CSRF state");
+            return (StatusCode::BAD_REQUEST, "Invalid or expired CSRF state. Please try logging in again.").into_response();
+        }
+    };
 
     // --- 2. Build OAuth2 client --------------------------------------------
-    let (oauth_client, redirect_uri) = match build_oauth_client(&state) {
+    let oauth_client = match build_oauth_client(&state, &redirect_uri) {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("OAuth2 client configuration error during callback: {e}");

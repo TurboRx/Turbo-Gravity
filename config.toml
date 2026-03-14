@@ -17,5 +17,5 @@ enable_dashboard = true    # Set to false to disable the web dashboard
 port = 8080
 session_secret = ""        # Random string for session signing; auto-generated if empty
 client_secret = ""         # Discord OAuth2 client secret (required for dashboard auth)
-callback_url = "http://localhost:8080/auth/discord/callback"
+callback_url = "http://localhost:8080/auth/callback"
 admin_ids = []             # List of Discord user IDs allowed to use admin endpoints

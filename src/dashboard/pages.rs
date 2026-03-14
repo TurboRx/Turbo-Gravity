@@ -1342,7 +1342,7 @@ pub fn setup_page(data: &SetupData) -> String {
         if data.port == crate::config::DEFAULT_PORT {
             crate::config::DEFAULT_CALLBACK_URL.to_string()
         } else {
-            format!("http://localhost:{}/auth/discord/callback", data.port)
+            format!("http://localhost:{}/auth/callback", data.port)
         }
     } else {
         data.callback_url.clone()
