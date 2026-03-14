@@ -66,9 +66,13 @@ body {
   min-height: 100vh;
   font-size: 14px;
   line-height: 1.5;
+  /* Prevent mobile browsers (Chrome/Android, Samsung Internet, etc.) from auto-scaling text which causes a "zoomed in" look */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
-a { color: inherit; text-decoration: none; }
-button { cursor: pointer; font-family: inherit; }
+a { color: inherit; text-decoration: none; touch-action: manipulation; }
+/* Prevent double-tap zoom on buttons and links on mobile browsers (Chrome/Android, Safari/iOS) */
+button { cursor: pointer; font-family: inherit; touch-action: manipulation; }
 input, select, textarea { font-family: inherit; }
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
@@ -585,6 +589,8 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
   .subgrid          { grid-template-columns: 1fr; }
   .module-grid      { grid-template-columns: 1fr 1fr; }
   .btn-actions      { flex-wrap: wrap; }
+  /* Prevent mobile browsers (Chrome/Android, Safari/iOS) from auto-zooming on input focus (font-size < 16px triggers zoom) */
+  input, select, textarea { font-size: 16px; }
 }
 
 /* ── Responsive: small mobile (≤ 480px) ─────────────────────────────────── */
