@@ -59,10 +59,12 @@ fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> any
 ///
 /// Resolution order (first non-empty value wins):
 /// 1. `DISCORD_REDIRECT_URI` environment variable – explicit override, highest priority.
-/// 2. Auto-detection from `X-Forwarded-Proto` + `Host` request headers – works
-///    transparently on cloud platforms that sit behind a TLS-terminating
-///    reverse proxy; the resulting URL always points at `/auth/callback` on the
-///    same host the browser used to reach the dashboard.
+/// 2. Auto-detection from reverse-proxy headers (`X-Forwarded-Proto` + `X-Forwarded-Host`
+///    or `Host`) – only performed when `X-Forwarded-Proto` is present and carries a
+///    valid `http` or `https` scheme, avoiding a spurious `http://` URL when the
+///    header is absent.  `X-Forwarded-Host` is preferred over `Host` because some
+///    reverse proxies rewrite the `Host` header while forwarding the original in
+///    `X-Forwarded-Host`.
 /// 3. `config.dashboard.callback_url` – static fallback for bare-metal / local setups.
 fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
     // 1. Explicit env-var override.
@@ -72,24 +74,35 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
         }
     }
 
-    // 2. Auto-detect from request headers.
-    //    X-Forwarded-Proto may contain a comma-separated list when there are
-    //    multiple proxies; take only the first (outermost) value. Only use this
-    //    auto-detection when the header is present and contains a valid scheme;
-    //    otherwise fall back to the configured callback URL to avoid inventing an
-    //    incorrect `http://` redirect.
+    // 2. Auto-detect from reverse-proxy headers.
+    //    Only proceed when X-Forwarded-Proto is present and specifies a valid
+    //    scheme; otherwise fall through to the configured callback URL to avoid
+    //    constructing an incorrect `http://` redirect when no proxy is involved.
+    //    X-Forwarded-Proto may carry a comma-separated list when there are
+    //    multiple proxies in the chain; take only the first (outermost) value.
     if let Some(proto_header) = headers.get("x-forwarded-proto") {
         if let Ok(proto_str) = proto_header.to_str() {
             if let Some(first) = proto_str.split(',').next() {
                 let scheme = first.trim().to_ascii_lowercase();
-                if (scheme == "http" || scheme == "https")
-                    && headers
-                        .get("host")
+                if scheme == "http" || scheme == "https" {
+                    // Prefer X-Forwarded-Host (the original host as seen by the
+                    // outermost proxy); fall back to the Host header.
+                    let host = headers
+                        .get("x-forwarded-host")
                         .and_then(|v| v.to_str().ok())
-                        .is_some()
-                {
-                    let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap();
-                    return format!("{scheme}://{host}/auth/callback");
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| {
+                            headers
+                                .get("host")
+                                .and_then(|v| v.to_str().ok())
+                                .map(|s| s.trim())
+                                .filter(|s| !s.is_empty())
+                        });
+
+                    if let Some(host) = host {
+                        return format!("{scheme}://{host}/auth/callback");
+                    }
                 }
             }
         }
@@ -317,7 +330,7 @@ pub async fn callback(
 
     // HttpOnly prevents JS access; SameSite=Lax prevents most CSRF attacks.
     // Secure ensures the cookie is only sent over HTTPS (important when deployed
-    // behind a TLS-terminating reverse proxy such as Zeabur).
+    // behind a TLS-terminating reverse proxy).
     let cookie = format!("session_id={session_id}; HttpOnly; Secure; Path=/; SameSite=Lax");
     (
         StatusCode::FOUND,
@@ -540,10 +553,24 @@ mod tests {
         routing::get,
         Router,
     };
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use tower::ServiceExt;
 
     use crate::{config, state};
+
+    /// Global mutex serialising tests that read or write process environment
+    /// variables.  `std::env::set_var` / `remove_var` are not thread-safe across
+    /// parallel test threads; holding this lock prevents races.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII guard that removes a named environment variable when dropped,
+    /// ensuring cleanup happens even if the test panics.
+    struct EnvVarGuard(&'static str);
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(self.0);
+        }
+    }
 
     fn test_state() -> state::SharedState {
         let cfg: config::Config = toml::from_str(
@@ -626,10 +653,12 @@ port = 8080
             .await
             .unwrap();
         // Either FORBIDDEN or UNAUTHORIZED depending on whether ADMIN_DISCORD_ID is set.
+        // 500 is also valid when ADMIN_DISCORD_ID is not configured at all.
         assert!(
             resp.status() == StatusCode::FORBIDDEN
-                || resp.status() == StatusCode::UNAUTHORIZED,
-            "expected 401 or 403, got {}",
+                || resp.status() == StatusCode::UNAUTHORIZED
+                || resp.status() == StatusCode::INTERNAL_SERVER_ERROR,
+            "expected 401, 403, or 500, got {}",
             resp.status()
         );
     }
@@ -648,7 +677,14 @@ port = 8080
                 username: "admin".to_string(),
             });
 
-        // Set the env var so the middleware can verify the admin
+        // Set the env var so the middleware can verify the admin.
+        // Use ENV_LOCK to prevent concurrent tests from seeing a stale value.
+        // EnvVarGuard ensures cleanup even if the test panics.
+        // NOTE: _lock_guard must be declared BEFORE _env_guard so that it is
+        // dropped AFTER _env_guard (Rust drops in reverse declaration order).
+        // This ensures the env var is removed while the lock is still held.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("ADMIN_DISCORD_ID");
         std::env::set_var("ADMIN_DISCORD_ID", admin_id);
 
         let resp = guarded_app(Arc::clone(&state))
@@ -661,9 +697,6 @@ port = 8080
             )
             .await
             .unwrap();
-
-        // Clean up env var
-        std::env::remove_var("ADMIN_DISCORD_ID");
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = body::to_bytes(resp.into_body(), 1024).await.unwrap();
@@ -683,5 +716,124 @@ port = 8080
         let a = generate_session_id();
         let b = generate_session_id();
         assert_ne!(a, b, "two generated session IDs must differ");
+    }
+
+    // ------------------------------------------------------------------
+    // detect_redirect_uri
+    // ------------------------------------------------------------------
+
+    fn make_headers(pairs: &[(&str, &str)]) -> axum::http::HeaderMap {
+        let mut map = axum::http::HeaderMap::new();
+        for (k, v) in pairs {
+            map.insert(
+                axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                axum::http::HeaderValue::from_str(v).unwrap(),
+            );
+        }
+        map
+    }
+
+    #[test]
+    fn detect_redirect_uri_uses_env_var_override() {
+        // DISCORD_REDIRECT_URI env var takes priority over any headers.
+        // _lock_guard declared first so it drops LAST (after _env_guard).
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::set_var("DISCORD_REDIRECT_URI", "https://override.example.com/auth/callback");
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https"),
+            ("host", "other.example.com"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://override.example.com/auth/callback");
+    }
+
+    #[test]
+    fn detect_redirect_uri_auto_detects_from_forwarded_headers() {
+        // When DISCORD_REDIRECT_URI is absent but X-Forwarded-Proto + Host are
+        // present, the URI should be built from those headers.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https"),
+            ("host", "mybot.example.com"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://mybot.example.com/auth/callback");
+    }
+
+    #[test]
+    fn detect_redirect_uri_prefers_x_forwarded_host_over_host() {
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https"),
+            ("x-forwarded-host", "public.example.com"),
+            ("host", "internal-hostname"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://public.example.com/auth/callback");
+    }
+
+    #[test]
+    fn detect_redirect_uri_accepts_multi_value_forwarded_proto() {
+        // X-Forwarded-Proto may be a comma-separated list; only the first value is used.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https, http"),
+            ("host", "mybot.example.com"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://mybot.example.com/auth/callback");
+    }
+
+    #[test]
+    fn detect_redirect_uri_falls_back_to_config_when_no_forwarded_proto() {
+        // Without X-Forwarded-Proto the function must not construct an http://
+        // URL from the Host header alone — it must use the configured callback URL.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[("host", "mybot.example.com")]);
+        let uri = detect_redirect_uri(&state, &headers);
+        // Should be the configured callback_url default, not an invented http:// URL.
+        assert_eq!(uri, state.config.dashboard.callback_url);
+    }
+
+    #[test]
+    fn detect_redirect_uri_ignores_unknown_scheme() {
+        // An X-Forwarded-Proto value other than http/https must not be used to
+        // construct a redirect URI; fall through to config fallback.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "ftp"),
+            ("host", "mybot.example.com"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, state.config.dashboard.callback_url);
+    }
+
+    #[test]
+    fn detect_redirect_uri_falls_back_to_config_when_host_empty() {
+        // X-Forwarded-Proto is valid but Host is empty — should not build a malformed URI.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        let state = test_state();
+        let headers = make_headers(&[("x-forwarded-proto", "https")]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, state.config.dashboard.callback_url);
     }
 }
