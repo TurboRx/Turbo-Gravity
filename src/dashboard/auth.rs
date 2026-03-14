@@ -407,16 +407,7 @@ pub async fn require_login_redirect(
     next: Next,
 ) -> Response {
     // Extract session_id from cookie.
-    let session_id = request
-        .headers()
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|raw| {
-            raw.split(';').find_map(|c| {
-                let c = c.trim();
-                c.strip_prefix("session_id=").map(str::to_string)
-            })
-        });
+    let session_id = extract_session_id(request.headers());
 
     let session_id = match session_id {
         Some(id) => id,
@@ -447,15 +438,7 @@ pub async fn current_session(
     state: &crate::state::AppState,
     headers: &axum::http::HeaderMap,
 ) -> Option<crate::state::SessionInfo> {
-    let session_id = headers
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|raw| {
-            raw.split(';').find_map(|c| {
-                let c = c.trim();
-                c.strip_prefix("session_id=").map(str::to_string)
-            })
-        })?;
+    let session_id = extract_session_id(headers)?;
 
     state.sessions.lock().await.get(&session_id).cloned()
 }
@@ -463,6 +446,19 @@ pub async fn current_session(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Extract the `session_id` from the `Cookie` header, if present.
+fn extract_session_id(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|raw| {
+            raw.split(';').find_map(|c| {
+                let c = c.trim();
+                c.strip_prefix("session_id=").map(str::to_string)
+            })
+        })
+}
 
 /// Generate a cryptographically random 32-byte session ID, hex-encoded (64 chars).
 fn generate_session_id() -> String {
