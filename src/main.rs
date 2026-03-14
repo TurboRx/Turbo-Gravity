@@ -24,6 +24,19 @@ async fn main() -> anyhow::Result<()> {
     // Validation is deferred until we know the bot is actually configured.
     let mut cfg = config::load()?;
 
+    // Allow the PORT environment variable to override the dashboard port.
+    // Cloud platforms such as Zeabur and Heroku set PORT to the port they route
+    // external traffic to; the app must listen on that port to be reachable.
+    if let Ok(port_str) = std::env::var("PORT") {
+        if let Ok(port) = port_str.parse::<u16>() {
+            // Port 0 is excluded: it asks the OS to assign a random port,
+            // which is not useful for a predictable dashboard endpoint.
+            if port > 0 {
+                cfg.dashboard.port = port;
+            }
+        }
+    }
+
     // -- Setup mode -----------------------------------------------------------
     // If the bot is not yet fully configured (fresh clone / first run), skip
     // Discord entirely and start the setup wizard so the user can configure
@@ -38,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
 
         info!("No bot token configured -- entering setup mode");
         info!(
-            "Open http://127.0.0.1:{}/setup in your browser to configure the bot.",
+            "Setup wizard listening on port {}. Open /setup on your server's public URL to configure the bot.",
             setup_port
         );
 
