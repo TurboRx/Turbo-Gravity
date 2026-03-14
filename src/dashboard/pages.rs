@@ -66,9 +66,13 @@ body {
   min-height: 100vh;
   font-size: 14px;
   line-height: 1.5;
+  /* Prevent Android browsers from auto-scaling text which causes a "zoomed in" look */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
-a { color: inherit; text-decoration: none; }
-button { cursor: pointer; font-family: inherit; }
+a { color: inherit; text-decoration: none; touch-action: manipulation; }
+/* Prevent double-tap zoom on buttons and links on Android/mobile browsers */
+button { cursor: pointer; font-family: inherit; touch-action: manipulation; }
 input, select, textarea { font-family: inherit; }
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
