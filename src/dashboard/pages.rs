@@ -774,7 +774,8 @@ document.addEventListener('click', function(e) {
 
 /* ── Auto-refresh: poll /api/bot/status every 30 seconds ────────────────── */
 (function() {
-  var pageStartTime = Date.now();
+  // Records when the auto-refresh script started (used for session uptime display).
+  var refreshStartTime = Date.now();
 
   function updateBotStatus(online, guildCount) {
     // Update status badge
@@ -798,7 +799,7 @@ document.addEventListener('click', function(e) {
     var uptimeEl = document.getElementById('live-uptime');
     var uptimeBar = document.getElementById('live-uptime-bar');
     if (uptimeEl && online) {
-      var secs = Math.floor((Date.now() - pageStartTime) / 1000);
+      var secs = Math.floor((Date.now() - refreshStartTime) / 1000);
       var h = Math.floor(secs / 3600);
       var m = Math.floor((secs % 3600) / 60);
       var s = secs % 60;
@@ -882,9 +883,10 @@ fn build_topbar(page_name: &str, username: &str) -> String {
     // Generate initials from the username (up to 2 chars, uppercase).
     let initials: String = username
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|p| !p.is_empty())
+        .filter(|p: &&str| !p.is_empty())
         .take(2)
-        .map(|p| p.chars().next().unwrap().to_ascii_uppercase())
+        .filter_map(|p| p.chars().next())
+        .map(|c| c.to_ascii_uppercase())
         .collect();
     let initials = if initials.is_empty() { "TG".to_string() } else { initials };
     let username_e = html_escape(username);
@@ -1770,7 +1772,8 @@ pub fn settings_page(data: &SettingsData) -> String {
         .split(|c: char| !c.is_alphanumeric())
         .filter(|p: &&str| !p.is_empty())
         .take(2)
-        .map(|p| p.chars().next().unwrap().to_ascii_uppercase())
+        .filter_map(|p| p.chars().next())
+        .map(|c| c.to_ascii_uppercase())
         .collect();
     let initials = if initials.is_empty() { "TG".to_string() } else { initials };
 

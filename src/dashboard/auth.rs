@@ -297,6 +297,9 @@ pub async fn logout(
     }
 
     // Clear the session cookie and redirect to login.
+    // Note: the Secure flag is intentionally kept consistent with the login cookie
+    // (set in the callback handler). In non-HTTPS environments the cookie should
+    // not have been sent at all, so the Max-Age=0 expiry covers HTTP-only deploys.
     let clear_cookie = "session_id=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0";
     (
         StatusCode::FOUND,
