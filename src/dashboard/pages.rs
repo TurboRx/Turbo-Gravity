@@ -803,7 +803,7 @@ document.addEventListener('click', function(e) {
       var h = Math.floor(secs / 3600);
       var m = Math.floor((secs % 3600) / 60);
       var s = secs % 60;
-      uptimeEl.textContent = (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
+      uptimeEl.textContent = 'Tab open: ' + (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
       if (uptimeBar) uptimeBar.style.width = '100%';
     } else if (uptimeEl) {
       uptimeEl.textContent = 'offline';
