@@ -1056,8 +1056,8 @@ client_id = "123"
             .unwrap();
         let text = body_string(resp.into_body()).await;
         assert!(
-            text.contains("offline"),
-            "expected 'offline' status badge when bot_online=false, got: {text}"
+            text.contains("status-badge offline"),
+            "expected 'offline' status badge (class 'status-badge offline') when bot_online=false, got: {text}"
         );
     }
 
@@ -1080,8 +1080,8 @@ client_id = "123"
             .unwrap();
         let text = body_string(resp.into_body()).await;
         assert!(
-            text.contains("online"),
-            "expected 'online' status badge when bot_online=true, got: {text}"
+            text.contains("status-badge online"),
+            "expected 'online' status badge (class 'status-badge online') when bot_online=true, got: {text}"
         );
     }
 

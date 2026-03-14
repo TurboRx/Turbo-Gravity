@@ -1557,9 +1557,10 @@ pub fn setup_complete_page(dashboard_port: u16) -> String {
 (function() {{
   var port = {dashboard_port};
   var proto = window.location.protocol;
-  var host = window.location.hostname;
+  var url = new URL(window.location.href);
   var isDefaultPort = (proto === 'https:' && port === 443) || (proto === 'http:' && port === 80);
-  var origin = proto + '//' + host + (isDefaultPort ? '' : ':' + port);
+  url.port = isDefaultPort ? '' : String(port);
+  var origin = url.origin;
   var attempts = 0;
   var maxAttempts = 60;
 
@@ -1577,7 +1578,7 @@ pub fn setup_complete_page(dashboard_port: u16) -> String {
     fetch(origin + '/health', {{ cache: 'no-store' }})
       .then(function(r) {{
         if (r.ok) {{
-          updateStatus('Bot is online! Redirecting to dashboard&hellip;');
+          updateStatus('Bot is online! Redirecting to dashboard…');
           window.location.href = origin + '/dashboard';
         }} else {{
           setTimeout(poll, 2000);
