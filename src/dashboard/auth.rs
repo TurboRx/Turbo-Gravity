@@ -74,16 +74,25 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
 
     // 2. Auto-detect from request headers.
     //    X-Forwarded-Proto may contain a comma-separated list when there are
-    //    multiple proxies; take only the first (outermost) value.
-    let scheme = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "http".to_string());
-
-    if let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) {
-        return format!("{scheme}://{host}/auth/callback");
+    //    multiple proxies; take only the first (outermost) value. Only use this
+    //    auto-detection when the header is present and contains a valid scheme;
+    //    otherwise fall back to the configured callback URL to avoid inventing an
+    //    incorrect `http://` redirect.
+    if let Some(proto_header) = headers.get("x-forwarded-proto") {
+        if let Ok(proto_str) = proto_header.to_str() {
+            if let Some(first) = proto_str.split(',').next() {
+                let scheme = first.trim().to_ascii_lowercase();
+                if (scheme == "http" || scheme == "https")
+                    && headers
+                        .get("host")
+                        .and_then(|v| v.to_str().ok())
+                        .is_some()
+                {
+                    let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap();
+                    return format!("{scheme}://{host}/auth/callback");
+                }
+            }
+        }
     }
 
     // 3. Static config fallback.
