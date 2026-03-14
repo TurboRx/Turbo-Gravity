@@ -13,15 +13,16 @@ use crate::state::SharedState;
 
 /// Spin up the optional Axum dashboard API.
 ///
-/// The server always binds to `0.0.0.0:{port}` (required for Zeabur and other
-/// container environments).  The `/api/config/*` routes and `/dashboard/settings`
-/// are protected by the `require_admin` middleware which enforces a valid Discord
-/// OAuth2 session belonging to `ADMIN_DISCORD_ID`.
+/// The server always binds to `0.0.0.0:{port}` (required for container
+/// environments and deployments behind reverse proxies).  The `/api/config/*`
+/// routes and `/dashboard/settings` are protected by the `require_admin`
+/// middleware which enforces a valid Discord OAuth2 session belonging to
+/// `ADMIN_DISCORD_ID`.
 pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let port = state.config.dashboard.port;
 
     // Always bind to all interfaces so the dashboard is reachable inside
-    // containers (Zeabur, Docker) and behind reverse proxies.
+    // containers and behind reverse proxies.
     let bind_addr = format!("0.0.0.0:{port}");
 
     // Build protected sub-routers.

@@ -75,7 +75,7 @@ impl Default for DashboardConfig {
 
 pub const DEFAULT_COMMAND_SCOPE: &str = "guild";
 pub const DEFAULT_PRESENCE_TEXT: &str = "Ready to serve";
-pub const DEFAULT_CALLBACK_URL: &str = "http://localhost:8080/auth/discord/callback";
+pub const DEFAULT_CALLBACK_URL: &str = "http://localhost:8080/auth/callback";
 pub const DEFAULT_PORT: u16 = 8080;
 pub const DEFAULT_ONLINE_STATUS: &str = "online";
 
@@ -328,7 +328,7 @@ port = 8080
         assert_eq!(DashboardConfig::default().port, 8080);
         assert_eq!(
             DashboardConfig::default().callback_url,
-            "http://localhost:8080/auth/discord/callback",
+            "http://localhost:8080/auth/callback",
         );
     }
 

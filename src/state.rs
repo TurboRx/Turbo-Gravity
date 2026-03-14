@@ -28,7 +28,11 @@ pub struct AppState {
     /// Active dashboard sessions: session_id → SessionInfo (user_id + username).
     pub sessions: Mutex<HashMap<String, SessionInfo>>,
     /// Pending OAuth2 CSRF states awaiting callback validation.
-    pub oauth_states: Mutex<HashMap<String, ()>>,
+    /// The value is the redirect URI used when initiating the login, so the
+    /// callback handler can reuse the exact same URI for the token exchange
+    /// (required by Discord's OAuth2 flow when the redirect URI is dynamic,
+    /// e.g. auto-detected from the Host header on cloud deployments).
+    pub oauth_states: Mutex<HashMap<String, String>>,
     /// Whether the Discord gateway connection is currently live.
     /// Set to `true` on READY / Resume; reset to `false` when the connection
     /// drops so the dashboard reflects the real bot status.

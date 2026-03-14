@@ -368,7 +368,11 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
     }
 
     let callback_url = if form.callback_url.is_empty() {
-        format!("http://localhost:{port}/auth/discord/callback")
+        if port == crate::config::DEFAULT_PORT {
+            crate::config::DEFAULT_CALLBACK_URL.to_string()
+        } else {
+            format!("http://localhost:{port}/auth/callback")
+        }
     } else {
         form.callback_url.clone()
     };
