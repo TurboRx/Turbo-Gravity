@@ -376,7 +376,7 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             // Signal the setup-mode dashboard to shut down so that main can
             // automatically start the bot without any manual intervention.
             state.setup_complete.notify_one();
-            Html(pages::setup_complete_page()).into_response()
+            Html(pages::setup_complete_page(port)).into_response()
         },
         Err(e) => {
             let data = ErrorData {

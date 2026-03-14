@@ -1551,8 +1551,52 @@ pub fn selector_page(data: &SelectorData) -> String {
 
 /// Rendered after a successful `POST /setup` submission.
 /// The bot starts automatically — no manual restart is required.
-pub fn setup_complete_page() -> String {
-    let head = html_head("Setup Complete", "");
+pub fn setup_complete_page(dashboard_port: u16) -> String {
+    let poll_script = format!(
+        r#"<script>
+(function() {{
+  var port = {dashboard_port};
+  var proto = window.location.protocol;
+  var host = window.location.hostname;
+  var isDefaultPort = (proto === 'https:' && port === 443) || (proto === 'http:' && port === 80);
+  var origin = proto + '//' + host + (isDefaultPort ? '' : ':' + port);
+  var attempts = 0;
+  var maxAttempts = 60;
+
+  function updateStatus(msg) {{
+    var el = document.getElementById('starting-status');
+    if (el) {{ el.textContent = msg; }}
+  }}
+
+  function poll() {{
+    attempts += 1;
+    if (attempts > maxAttempts) {{
+      updateStatus('Bot startup is taking longer than expected. Please navigate to the dashboard manually.');
+      return;
+    }}
+    fetch(origin + '/health', {{ cache: 'no-store' }})
+      .then(function(r) {{
+        if (r.ok) {{
+          updateStatus('Bot is online! Redirecting to dashboard&hellip;');
+          window.location.href = origin + '/dashboard';
+        }} else {{
+          setTimeout(poll, 2000);
+        }}
+      }})
+      .catch(function() {{
+        setTimeout(poll, 2000);
+      }});
+  }}
+
+  document.addEventListener('DOMContentLoaded', function() {{
+    setTimeout(poll, 3000);
+  }});
+}})();
+</script>"#,
+        dashboard_port = dashboard_port
+    );
+
+    let head = html_head("Setup Complete", &poll_script);
     let foot = html_foot();
 
     format!(
@@ -1571,8 +1615,11 @@ pub fn setup_complete_page() -> String {
         <span class="setup-section-title">Bot is Starting&hellip;</span>
       </div>
       <p style="color:var(--text2);margin-bottom:14px">
-        The bot is connecting to Discord automatically. The dashboard will be
-        available at the configured port once the bot is online.
+        The bot is connecting to Discord automatically. This page will
+        redirect to the dashboard automatically once the bot is online.
+      </p>
+      <p id="starting-status" aria-live="polite" style="color:var(--text2);font-size:13px;margin-top:8px">
+        Waiting for bot to start&hellip;
       </p>
     </div>
 
