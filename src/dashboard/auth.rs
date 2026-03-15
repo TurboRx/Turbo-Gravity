@@ -59,14 +59,14 @@ fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> any
 ///
 /// Resolution order (first non-empty value wins):
 /// 1. `DISCORD_REDIRECT_URI` environment variable – explicit override, highest priority.
-/// 2. Auto-detection from reverse-proxy headers (`X-Forwarded-Proto` + `X-Forwarded-Host`
-///    or `Host`) – only performed when `X-Forwarded-Proto` is present and carries a
-///    valid `http` or `https` scheme, avoiding a spurious `http://` URL when the
-///    header is absent.  `X-Forwarded-Host` is preferred over `Host` because some
-///    reverse proxies rewrite the `Host` header while forwarding the original in
-///    `X-Forwarded-Host`.
-/// 3. `config.dashboard.callback_url` – static fallback for bare-metal / local setups.
-fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
+/// 2. `config.dashboard.callback_url` when it has been explicitly set to a non-default
+///    value – honours the user's deliberate configuration and prevents a mismatch with
+///    the URI registered in Discord's developer portal.
+/// 3. Auto-detection from reverse-proxy headers (`X-Forwarded-Proto` + `X-Forwarded-Host`
+///    or `Host`) – used for fresh/default deployments on cloud platforms (Zeabur, Heroku,
+///    etc.) where the callback URL has not yet been explicitly configured.
+/// 4. `config.dashboard.callback_url` – static fallback (default localhost value).
+pub fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
     // 1. Explicit env-var override.
     if let Ok(uri) = std::env::var("DISCORD_REDIRECT_URI") {
         if !uri.is_empty() {
@@ -74,12 +74,24 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
         }
     }
 
-    // 2. Auto-detect from reverse-proxy headers.
+    // 2. Explicitly configured non-default callback URL.
+    //    When the user has set a specific callback URL (different from the default
+    //    localhost value), use it directly.  This ensures the redirect URI in every
+    //    authorization request exactly matches what was registered in Discord's
+    //    developer portal, preventing "invalid oauth2 redirect uri" errors that
+    //    occur when header auto-detection produces a different URI.
+    let configured = &state.config.dashboard.callback_url;
+    if !configured.is_empty() && configured != crate::config::DEFAULT_CALLBACK_URL {
+        return configured.clone();
+    }
+
+    // 3. Auto-detect from reverse-proxy headers.
     //    Only proceed when X-Forwarded-Proto is present and specifies a valid
     //    scheme; otherwise fall through to the configured callback URL to avoid
     //    constructing an incorrect `http://` redirect when no proxy is involved.
-    //    X-Forwarded-Proto may carry a comma-separated list when there are
-    //    multiple proxies in the chain; take only the first (outermost) value.
+    //    Both X-Forwarded-Proto and X-Forwarded-Host may carry comma-separated
+    //    lists when there are multiple proxies in the chain; take only the first
+    //    (outermost) value in each case.
     if let Some(proto_header) = headers.get("x-forwarded-proto") {
         if let Ok(proto_str) = proto_header.to_str() {
             if let Some(first) = proto_str.split(',').next() {
@@ -90,6 +102,7 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
                     let host = headers
                         .get("x-forwarded-host")
                         .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.split(',').next())
                         .map(|s| s.trim())
                         .filter(|s| !s.is_empty())
                         .or_else(|| {
@@ -108,7 +121,7 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
         }
     }
 
-    // 3. Static config fallback.
+    // 4. Static config fallback (default localhost value).
     state.config.dashboard.callback_url.clone()
 }
 
@@ -835,5 +848,59 @@ port = 8080
         let headers = make_headers(&[("x-forwarded-proto", "https")]);
         let uri = detect_redirect_uri(&state, &headers);
         assert_eq!(uri, state.config.dashboard.callback_url);
+    }
+
+    #[test]
+    fn detect_redirect_uri_uses_configured_url_when_non_default() {
+        // When the user has explicitly configured a non-default callback URL, it
+        // must take priority over proxy header auto-detection.  This prevents
+        // "invalid oauth2 redirect uri" errors when the auto-detected URI differs
+        // from the one registered in Discord's developer portal.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+
+        let cfg: config::Config = toml::from_str(
+            r#"
+[bot]
+token = "test-token"
+client_id = "123456"
+[dashboard]
+enable_dashboard = true
+port = 8080
+callback_url = "https://mybot.example.com/auth/callback"
+"#,
+        )
+        .expect("test config must parse");
+        let state: state::SharedState = Arc::new(state::AppState::new(cfg, None));
+
+        // Proxy headers that would yield a *different* URL if auto-detection were used.
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https"),
+            ("host", "other.example.com"),
+        ]);
+
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://mybot.example.com/auth/callback",
+            "explicitly configured non-default callback_url must win over header auto-detection");
+    }
+
+    #[test]
+    fn detect_redirect_uri_handles_multi_value_x_forwarded_host() {
+        // X-Forwarded-Host may be a comma-separated list when multiple reverse
+        // proxies are chained; only the first (outermost) value should be used,
+        // consistent with how X-Forwarded-Proto is handled.
+        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
+        std::env::remove_var("DISCORD_REDIRECT_URI");
+        // Use the default test state (default callback URL) so auto-detection runs.
+        let state = test_state();
+        let headers = make_headers(&[
+            ("x-forwarded-proto", "https"),
+            ("x-forwarded-host", "public.example.com, 10.0.0.1"),
+        ]);
+        let uri = detect_redirect_uri(&state, &headers);
+        assert_eq!(uri, "https://public.example.com/auth/callback",
+            "only the first X-Forwarded-Host value should be used");
     }
 }
