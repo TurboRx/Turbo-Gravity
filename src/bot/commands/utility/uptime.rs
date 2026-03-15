@@ -50,3 +50,20 @@ pub async fn uptime(ctx: Context<'_>) -> Result<(), Error> {
     ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_duration() {
+        assert_eq!(format_duration(0), "0s");
+        assert_eq!(format_duration(30), "30s");
+        assert_eq!(format_duration(60), "1m 0s");
+        assert_eq!(format_duration(90), "1m 30s");
+        assert_eq!(format_duration(3600), "1h 0s");
+        assert_eq!(format_duration(3661), "1h 1m 1s");
+        assert_eq!(format_duration(86400), "1d 0s");
+        assert_eq!(format_duration(86400 + 3600 + 60 + 1), "1d 1h 1m 1s");
+    }
+}
