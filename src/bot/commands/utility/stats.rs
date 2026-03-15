@@ -3,10 +3,11 @@ use poise::serenity_prelude as serenity;
 
 /// Read RSS memory usage from /proc/self/statm (Linux only).
 /// Returns megabytes, or None on non-Linux platforms.
-fn resident_memory_mb() -> Option<u64> {
+async fn resident_memory_mb() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
-        std::fs::read_to_string("/proc/self/statm")
+        tokio::fs::read_to_string("/proc/self/statm")
+            .await
             .ok()
             .and_then(|s| {
                 s.split_whitespace()
@@ -49,7 +50,7 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
         .field("👥 Members", users.to_string(), true)
         .field("📡 API Ping", format!("{api_ms}ms"), true);
 
-    if let Some(mb) = resident_memory_mb() {
+    if let Some(mb) = resident_memory_mb().await {
         embed = embed.field("🧠 Memory", format!("{mb} MB"), true);
     }
 
