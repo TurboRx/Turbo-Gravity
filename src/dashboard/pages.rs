@@ -1587,7 +1587,6 @@ pub struct SelectorData {
     pub guilds:      Vec<GuildInfo>,
     pub bot_status:  &'static str,
     /// Number of guilds from bot state (for display when guild list is empty).
-    pub _guild_count: usize,
     #[allow(dead_code)]
     pub guild_count: usize,
 }

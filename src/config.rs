@@ -247,8 +247,8 @@ client_id = "123456"
     }
 
     #[test]
-    fn parse_minimal_config_applies_defaults() -> anyhow::Result<()> {
-        let cfg: Config = toml::from_str(minimal_toml())?;
+    fn parse_minimal_config_applies_defaults() {
+        let cfg: Config = toml::from_str(minimal_toml()).unwrap();
         assert_eq!(cfg.bot.token, "test-token");
         assert_eq!(cfg.bot.client_id, "123456");
         // defaults
@@ -261,11 +261,10 @@ client_id = "123456"
         // No [dashboard] section → Default impl → enable_dashboard = false
         assert!(!cfg.dashboard.enable_dashboard);
         assert_eq!(cfg.dashboard.port, 8080);
-        Ok(())
     }
 
     #[test]
-    fn parse_full_config() -> anyhow::Result<()> {
+    fn parse_full_config() {
         let toml = r#"
 [bot]
 token = "bot-token"
@@ -283,7 +282,7 @@ enable_dashboard = true
 port = 9090
 admin_ids = ["111", "222"]
 "#;
-        let cfg: Config = toml::from_str(toml)?;
+        let cfg: Config = toml::from_str(toml).unwrap();
         assert_eq!(cfg.bot.guild_id, "my-guild");
         assert_eq!(cfg.bot.command_scope, "global");
         assert_eq!(cfg.bot.presence_type, 2);
@@ -291,7 +290,6 @@ admin_ids = ["111", "222"]
         assert!(cfg.dashboard.enable_dashboard);
         assert_eq!(cfg.dashboard.port, 9090);
         assert_eq!(cfg.dashboard.admin_ids, vec!["111", "222"]);
-        Ok(())
     }
 
     #[test]
@@ -305,9 +303,9 @@ admin_ids = ["111", "222"]
     /// must agree so that the behaviour is the same whether the `[dashboard]` section
     /// is absent or present with all fields omitted.
     #[test]
-    fn dashboard_enable_dashboard_defaults_are_consistent() -> anyhow::Result<()> {
+    fn dashboard_enable_dashboard_defaults_are_consistent() {
         // Case 1: no [dashboard] section at all → uses DashboardConfig::default()
-        let no_section: Config = toml::from_str(minimal_toml())?;
+        let no_section: Config = toml::from_str(minimal_toml()).unwrap();
         assert!(!no_section.dashboard.enable_dashboard);
 
         // Case 2: [dashboard] section present but enable_dashboard omitted → uses serde default fn
@@ -320,7 +318,8 @@ client_id = "c"
 [dashboard]
 port = 8080
 "#,
-        )?;
+        )
+        .unwrap();
         assert!(!with_section.dashboard.enable_dashboard,
             "enable_dashboard serde default must match Default impl (both false)");
 
@@ -331,11 +330,10 @@ port = 8080
             DashboardConfig::default().callback_url,
             "http://localhost:8080/auth/callback",
         );
-        Ok(())
     }
 
     #[test]
-    fn config_round_trips_through_toml() -> anyhow::Result<()> {
+    fn config_round_trips_through_toml() {
         let original: Config = toml::from_str(
             r#"
 [bot]
@@ -354,81 +352,77 @@ enable_dashboard = true
 port = 9000
 admin_ids = ["42"]
 "#,
-        )?;
-        let serialized = toml::to_string_pretty(&original)?;
-        let restored: Config = toml::from_str(&serialized)?;
+        )
+        .unwrap();
+        let serialized = toml::to_string_pretty(&original).unwrap();
+        let restored: Config = toml::from_str(&serialized).unwrap();
         assert_eq!(restored.bot.token, original.bot.token);
         assert_eq!(restored.bot.presence_type, original.bot.presence_type);
         assert_eq!(restored.database.mongo_uri, original.database.mongo_uri);
         assert_eq!(restored.dashboard.enable_dashboard, original.dashboard.enable_dashboard);
         assert_eq!(restored.dashboard.port, original.dashboard.port);
         assert_eq!(restored.dashboard.admin_ids, original.dashboard.admin_ids);
-        Ok(())
     }
 
     #[test]
-    fn needs_setup_true_when_token_empty() -> anyhow::Result<()> {
+    fn needs_setup_true_when_token_empty() {
         let cfg: Config = toml::from_str(
             r#"[bot]
 token = ""
 client_id = "123"
 "#,
-        )?;
+        )
+        .unwrap();
         assert!(needs_setup(&cfg));
-        Ok(())
     }
 
     #[test]
-    fn needs_setup_true_when_token_whitespace_only() -> anyhow::Result<()> {
+    fn needs_setup_true_when_token_whitespace_only() {
         let cfg: Config = toml::from_str(
             r#"[bot]
 token = "   "
 client_id = "123"
 "#,
-        )?;
+        )
+        .unwrap();
         assert!(needs_setup(&cfg));
-        Ok(())
     }
 
     #[test]
-    fn needs_setup_false_when_token_set() -> anyhow::Result<()> {
-        let cfg: Config = toml::from_str(minimal_toml())?;
+    fn needs_setup_false_when_token_set() {
+        let cfg: Config = toml::from_str(minimal_toml()).unwrap();
         assert!(!needs_setup(&cfg));
-        Ok(())
     }
 
     #[test]
-    fn load_returns_default_when_config_file_missing() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let original_dir = std::env::current_dir()?;
-        std::env::set_current_dir(temp_dir.path())?;
+    fn load_returns_default_when_config_file_missing() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let result = load();
 
-        std::env::set_current_dir(&original_dir)?;
+        std::env::set_current_dir(&original_dir).unwrap();
 
         let cfg = result.expect("load() must succeed even when config.toml is absent");
         assert!(needs_setup(&cfg), "a missing config file should trigger setup mode");
         assert_eq!(cfg.dashboard.port, DEFAULT_PORT);
         assert_eq!(cfg.bot.online_status, DEFAULT_ONLINE_STATUS);
-        Ok(())
     }
 
     #[test]
-    fn validate_rejects_invalid_online_status() -> anyhow::Result<()> {
-        let mut cfg: Config = toml::from_str(minimal_toml())?;
+    fn validate_rejects_invalid_online_status() {
+        let mut cfg: Config = toml::from_str(minimal_toml()).unwrap();
         cfg.bot.online_status = "away".to_string(); // not a valid value
         assert!(validate(&cfg).is_err());
-        Ok(())
     }
 
     #[test]
-    fn validate_accepts_all_valid_online_statuses() -> anyhow::Result<()> {
-        let mut cfg: Config = toml::from_str(minimal_toml())?;
+    fn validate_accepts_all_valid_online_statuses() {
+        let mut cfg: Config = toml::from_str(minimal_toml()).unwrap();
         for status in &["online", "dnd", "idle", "invisible"] {
             cfg.bot.online_status = status.to_string();
             assert!(validate(&cfg).is_ok(), "expected ok for status={status}");
         }
-        Ok(())
     }
 }
