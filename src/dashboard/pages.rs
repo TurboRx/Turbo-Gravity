@@ -1587,7 +1587,7 @@ pub struct SelectorData {
     pub guilds:      Vec<GuildInfo>,
     pub bot_status:  &'static str,
     /// Number of guilds from bot state (for display when guild list is empty).
-    pub guild_count: usize,
+    pub _guild_count: usize,
 }
 
 pub fn selector_page(data: &SelectorData) -> String {

@@ -203,7 +203,7 @@ async fn selector_page(
         username,
         guilds: vec![],
         bot_status,
-        guild_count,
+        _guild_count: guild_count,
     };
     Html(pages::selector_page(&data))
 }
@@ -698,7 +698,7 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 
         let toml_content = {
             use std::io::Read;
-            let mut entry = archive.by_index(entry_index).map_err(|e| {
+            let entry = archive.by_index(entry_index).map_err(|e| {
                 tracing::error!("config_restore: failed to open ZIP entry: {e}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
             })?;
