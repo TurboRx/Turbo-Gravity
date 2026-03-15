@@ -47,7 +47,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rand = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
