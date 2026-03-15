@@ -160,17 +160,28 @@ async fn dashboard_page(
 /// bot is not yet configured (`needs_setup` is true).  Once the bot is
 /// configured, visiting `/setup` redirects to `/dashboard` so that secrets are
 /// never exposed to unauthenticated users on a publicly-bound server.
-async fn setup_page(State(state): State<SharedState>) -> Response {
+///
+/// The OAuth2 callback URL field is pre-filled using `detect_redirect_uri`,
+/// which prefers an environment variable override or a non-default
+/// `config.dashboard.callback_url` if set, and otherwise derives the URL from
+/// the current request headers.  On cloud deployments behind a reverse proxy
+/// (e.g. Zeabur) this typically resolves to the correct public HTTPS URL so
+/// the user registers and saves the right URI in Discord's developer portal,
+/// preventing "invalid oauth2 redirect uri" errors at login time.
+async fn setup_page(State(state): State<SharedState>, headers: HeaderMap) -> Response {
     if !crate::config::needs_setup(&state.config) {
         // Setup already complete — redirect away to avoid exposing secrets.
         return (StatusCode::FOUND, [(header::LOCATION, "/dashboard")]).into_response();
     }
+    // Detect the redirect URI (respecting any overrides/config) so the form
+    // pre-fills with the URL that will actually be used during the OAuth2 flow.
+    let callback_url = super::auth::detect_redirect_uri(&state, &headers);
     let data = SetupData {
         token: state.config.bot.token.clone(),
         owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
         client_id: state.config.bot.client_id.clone(),
         client_secret: state.config.dashboard.client_secret.clone(),
-        callback_url: state.config.dashboard.callback_url.clone(),
+        callback_url,
         mongo_uri: state.config.database.mongo_uri.clone(),
         session_secret: state.config.dashboard.session_secret.clone(),
         guild_id: state.config.bot.guild_id.clone(),
