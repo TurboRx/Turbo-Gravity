@@ -66,7 +66,7 @@ fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> any
 ///    or `Host`) – used for fresh/default deployments on cloud platforms (Zeabur, Heroku,
 ///    etc.) where the callback URL has not yet been explicitly configured.
 /// 4. `config.dashboard.callback_url` – static fallback (default localhost value).
-pub fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
+pub(super) fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::HeaderMap) -> String {
     // 1. Explicit env-var override.
     if let Ok(uri) = std::env::var("DISCORD_REDIRECT_URI") {
         if !uri.is_empty() {
