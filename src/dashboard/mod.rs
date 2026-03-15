@@ -67,6 +67,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
                 .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
                 .allow_headers([axum::http::header::CONTENT_TYPE]),
         )
+        .layer(axum::middleware::from_fn(add_security_headers))
         .layer(TraceLayer::new_for_http())
         // Inject Arc<AppState> into all route handlers
         .with_state(Arc::clone(&state));
@@ -92,4 +93,67 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown)
     .await?;
     Ok(())
+}
+
+/// Middleware that adds standard security headers to all outgoing responses.
+///
+/// These headers provide defense-in-depth against common web vulnerabilities
+/// like XSS, clickjacking, and MIME-sniffing.
+async fn add_security_headers(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+
+    // Content-Security-Policy: restrict where resources can be loaded from.
+    // - 'self': allow resources from the same origin.
+    // - 'unsafe-inline': required for the embedded theme and dashboard scripts.
+    // - fonts.googleapis.com / fonts.gstatic.com: Google Fonts.
+    // - cdn.discordapp.com: Discord guild icons.
+    let csp = "default-src 'self'; \
+               script-src 'self' 'unsafe-inline'; \
+               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+               font-src 'self' https://fonts.gstatic.com; \
+               img-src 'self' https://cdn.discordapp.com data:; \
+               frame-ancestors 'none'; \
+               base-uri 'self'; \
+               form-action 'self';";
+
+    headers.insert(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_static(csp),
+    );
+
+    // X-Content-Type-Options: prevent MIME-type sniffing.
+    headers.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        axum::http::HeaderValue::from_static("nosniff"),
+    );
+
+    // X-Frame-Options: prevent clickjacking by disallowing embedding in iframes.
+    headers.insert(
+        axum::http::header::X_FRAME_OPTIONS,
+        axum::http::HeaderValue::from_static("DENY"),
+    );
+
+    // Referrer-Policy: control how much referrer information is sent.
+    headers.insert(
+        axum::http::header::REFERRER_POLICY,
+        axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+
+    // Strict-Transport-Security: force HTTPS (ignored by browsers on http://localhost).
+    headers.insert(
+        axum::http::header::STRICT_TRANSPORT_SECURITY,
+        axum::http::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+    );
+
+    // X-XSS-Protection: legacy header to enable browser XSS filtering.
+    headers.insert(
+        axum::http::header::HeaderName::from_static("x-xss-protection"),
+        axum::http::HeaderValue::from_static("1; mode=block"),
+    );
+
+    response
 }
