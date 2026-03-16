@@ -45,9 +45,11 @@ pub async fn start(state: SharedState) -> anyhow::Result<()> {
 /// Build the Serenity/Poise client and run it until it exits or errors.
 async fn run_client(state: SharedState) -> anyhow::Result<()> {
     let token = state.config.bot.token.clone();
-    let intents = serenity::GatewayIntents::non_privileged()
-        | serenity::GatewayIntents::GUILD_MEMBERS
-        | serenity::GatewayIntents::MESSAGE_CONTENT;
+    // Use non_privileged intents by default. GUILD_MEMBERS and MESSAGE_CONTENT
+    // are privileged intents that require explicit enabling in the Discord
+    // Developer Portal (Bot → Privileged Gateway Intents).
+    // Enable them there and add them back here once toggled on.
+    let intents = serenity::GatewayIntents::non_privileged();
 
     let commands = commands::all();
 

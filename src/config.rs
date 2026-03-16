@@ -205,10 +205,15 @@ pub fn needs_setup(cfg: &Config) -> bool {
 pub fn load() -> anyhow::Result<Config> {
     let path = Path::new("config.toml");
     if !path.exists() {
+        let token = std::env::var("DISCORD_TOKEN").unwrap_or_default();
+        let client_id = std::env::var("DISCORD_APPLICATION_ID").unwrap_or_default();
+        let client_secret = std::env::var("DISCORD_CLIENT_SECRET").unwrap_or_default();
+        let admin_id = std::env::var("ADMIN_DISCORD_ID").unwrap_or_default();
+        let admin_ids = if admin_id.is_empty() { vec![] } else { vec![admin_id] };
         return Ok(Config {
             bot: BotConfig {
-                token: String::new(),
-                client_id: String::new(),
+                token,
+                client_id,
                 guild_id: String::new(),
                 command_scope: DEFAULT_COMMAND_SCOPE.to_string(),
                 presence_text: DEFAULT_PRESENCE_TEXT.to_string(),
@@ -217,12 +222,44 @@ pub fn load() -> anyhow::Result<Config> {
                 avatar_url: String::new(),
             },
             database: DatabaseConfig::default(),
-            dashboard: DashboardConfig::default(),
+            dashboard: DashboardConfig {
+                enable_dashboard: true,
+                port: DEFAULT_PORT,
+                session_secret: String::new(),
+                client_secret,
+                callback_url: DEFAULT_CALLBACK_URL.into(),
+                admin_ids,
+            },
         });
     }
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read config file at '{}'", path.display()))?;
-    toml::from_str(&raw).context("Failed to parse config.toml")
+    let mut cfg: Config = toml::from_str(&raw).context("Failed to parse config.toml")?;
+
+    // Allow environment variables to override sensitive config values so that
+    // tokens and secrets never have to be stored in config.toml on disk.
+    if let Ok(token) = std::env::var("DISCORD_TOKEN") {
+        if !token.trim().is_empty() {
+            cfg.bot.token = token;
+        }
+    }
+    if let Ok(secret) = std::env::var("DISCORD_CLIENT_SECRET") {
+        if !secret.trim().is_empty() {
+            cfg.dashboard.client_secret = secret;
+        }
+    }
+    if let Ok(admin_id) = std::env::var("ADMIN_DISCORD_ID") {
+        if !admin_id.trim().is_empty() && cfg.dashboard.admin_ids.is_empty() {
+            cfg.dashboard.admin_ids = vec![admin_id];
+        }
+    }
+    if let Ok(client_id) = std::env::var("DISCORD_APPLICATION_ID") {
+        if !client_id.trim().is_empty() && cfg.bot.client_id.trim().is_empty() {
+            cfg.bot.client_id = client_id;
+        }
+    }
+
+    Ok(cfg)
 }
 
 /// Serialize `Config` back to `config.toml` in the current working directory.

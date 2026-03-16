@@ -1,13 +1,15 @@
 # Bot configuration
-# Copy this file to config.toml and fill in your values.
+# Copy this file to config.toml and fill in your values,
+# or use environment variables (DISCORD_TOKEN, DISCORD_APPLICATION_ID,
+# DISCORD_CLIENT_SECRET, ADMIN_DISCORD_ID) which take priority.
 
 [bot]
-token = ""           # Your Discord bot token
-client_id = ""       # Your Discord application/client ID
+token = ""           # Your Discord bot token (or set DISCORD_TOKEN env var)
+client_id = ""       # Your Discord application/client ID (or DISCORD_APPLICATION_ID env var)
 guild_id = ""        # Guild ID for guild-scoped command registration (leave empty for global)
-command_scope = "guild"   # "guild" or "global"
+command_scope = "global"   # "guild" or "global"
 presence_text = "Ready to serve"
-presence_type = 0    # 0=Playing, 1=Streaming, 2=Listening, 3=Watching
+presence_type = 0    # 0=Playing, 1=Streaming, 2=Listening, 3=Watching, 4=Competing
 
 [database]
 mongo_uri = ""       # MongoDB connection string (leave empty to run without DB)
@@ -16,6 +18,7 @@ mongo_uri = ""       # MongoDB connection string (leave empty to run without DB)
 enable_dashboard = true    # Set to false to disable the web dashboard
 port = 8080
 session_secret = ""        # Random string for session signing; auto-generated if empty
-client_secret = ""         # Discord OAuth2 client secret (required for dashboard auth)
+client_secret = ""         # Discord OAuth2 client secret (or DISCORD_CLIENT_SECRET env var)
 callback_url = "http://localhost:8080/auth/callback"
 admin_ids = []             # List of Discord user IDs allowed to use admin endpoints
+                           # (or set ADMIN_DISCORD_ID env var)
