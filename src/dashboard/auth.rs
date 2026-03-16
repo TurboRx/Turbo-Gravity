@@ -17,7 +17,7 @@ use axum::{
     Json,
 };
 use oauth2::{
-    AuthUrl, ClientId, ClientSecret, CsrfToken, RedirectUrl,
+    AuthUrl, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet, RedirectUrl,
     Scope, TokenUrl,
     basic::BasicClient,
 };
@@ -29,12 +29,24 @@ use crate::state::{SessionInfo, SharedState};
 // OAuth2 client helpers
 // ---------------------------------------------------------------------------
 
+/// Concrete [`BasicClient`] type returned by [`build_oauth_client`].
+///
+/// The two `EndpointSet` positions correspond to `HasAuthUrl` and `HasTokenUrl`
+/// being set via [`BasicClient::set_auth_uri`] and [`BasicClient::set_token_uri`].
+type DiscordOauthClient = BasicClient<
+    EndpointSet,     // HasAuthUrl
+    EndpointNotSet,  // HasDeviceAuthUrl
+    EndpointNotSet,  // HasIntrospectionUrl
+    EndpointNotSet,  // HasRevocationUrl
+    EndpointSet,     // HasTokenUrl
+>;
+
 /// Build a Discord OAuth2 [`BasicClient`] using the supplied `redirect_uri`.
 ///
 /// The `client_id` and `client_secret` are read from env vars first
 /// (`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`), falling back to the values
 /// stored in the application config.
-fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> anyhow::Result<BasicClient> {
+fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> anyhow::Result<DiscordOauthClient> {
     let client_id = std::env::var("DISCORD_CLIENT_ID")
         .unwrap_or_else(|_| state.config.bot.client_id.clone());
     let client_secret = std::env::var("DISCORD_CLIENT_SECRET")
@@ -44,13 +56,11 @@ fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> any
     anyhow::ensure!(!client_secret.is_empty(), "DISCORD_CLIENT_SECRET is not configured");
     anyhow::ensure!(!redirect_uri.is_empty(), "DISCORD_REDIRECT_URI is not configured");
 
-    let client = BasicClient::new(
-        ClientId::new(client_id),
-        Some(ClientSecret::new(client_secret)),
-        AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string())?,
-        Some(TokenUrl::new("https://discord.com/api/oauth2/token".to_string())?),
-    )
-    .set_redirect_uri(RedirectUrl::new(redirect_uri.to_string())?);
+    let client = BasicClient::new(ClientId::new(client_id))
+        .set_client_secret(ClientSecret::new(client_secret))
+        .set_auth_uri(AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string())?)
+        .set_token_uri(TokenUrl::new("https://discord.com/api/oauth2/token".to_string())?)
+        .set_redirect_uri(RedirectUrl::new(redirect_uri.to_string())?);
 
     Ok(client)
 }
