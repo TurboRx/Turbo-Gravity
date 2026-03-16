@@ -181,16 +181,10 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
 /// `server_count` comes from the READY event's guild list (accurate at startup).
 /// `{members}` resolves to "0" at startup because member counts require the cache
 /// to receive all GUILD_CREATE events, which happens asynchronously after READY.
-/// `{servers}` is replaced with singular "1 Server" or plural "N Servers".
+/// `{servers}` is replaced with the numeric server count.
 fn resolve_presence_text(text: &str, server_count: usize) -> String {
-    let servers_str = if server_count == 1 {
-        "1 Server".to_string()
-    } else {
-        format!("{} Servers", server_count)
-    };
-    
     // Members count is unavailable at READY time; use 0 as a safe initial value.
-    text.replace("{servers}", &servers_str)
+    text.replace("{servers}", &server_count.to_string())
         .replace("{members}", "0")
 }
 
