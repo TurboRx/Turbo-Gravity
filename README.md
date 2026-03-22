@@ -7,7 +7,7 @@
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
 [![Poise](https://img.shields.io/badge/poise-0.6-blue.svg)](https://github.com/serenity-rs/poise)
 
-**A production-ready, feature-rich Discord bot with an optional web dashboard.**  
+**A feature-rich Discord bot with an optional web dashboard.**  
 Built in **Rust** with [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity) and [Axum](https://github.com/tokio-rs/axum).
 
 </div>
