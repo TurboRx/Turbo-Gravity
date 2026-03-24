@@ -1,5 +1,5 @@
-mod ball8;
 mod balance;
+mod ball8;
 mod coinflip;
 mod daily;
 mod roll;

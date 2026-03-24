@@ -26,7 +26,10 @@ pub async fn ban(
         (guild.id, guild.name.clone())
     };
 
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
     let delete_days = delete_days.unwrap_or(0);
 
     if user.id == ctx.author().id {
@@ -58,8 +61,9 @@ pub async fn ban(
         }
 
         // Try to DM the target before banning
-        let dm = serenity::CreateMessage::new()
-            .content(format!("You were banned from **{guild_name}** | Reason: {reason}"));
+        let dm = serenity::CreateMessage::new().content(format!(
+            "You were banned from **{guild_name}** | Reason: {reason}"
+        ));
         let _ = user.dm(ctx, dm).await;
     }
 

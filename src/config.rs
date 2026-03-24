@@ -142,7 +142,10 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
 
     // Validate online_status
     anyhow::ensure!(
-        matches!(cfg.bot.online_status.as_str(), "online" | "dnd" | "idle" | "invisible"),
+        matches!(
+            cfg.bot.online_status.as_str(),
+            "online" | "dnd" | "idle" | "invisible"
+        ),
         "config.bot.online_status must be 'online', 'dnd', 'idle', or 'invisible', got '{}'",
         cfg.bot.online_status
     );
@@ -164,7 +167,8 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
     // Validate MongoDB URI format if provided
     if !cfg.database.mongo_uri.is_empty() {
         anyhow::ensure!(
-            cfg.database.mongo_uri.starts_with("mongodb://") || cfg.database.mongo_uri.starts_with("mongodb+srv://"),
+            cfg.database.mongo_uri.starts_with("mongodb://")
+                || cfg.database.mongo_uri.starts_with("mongodb+srv://"),
             "config.database.mongo_uri must start with 'mongodb://' or 'mongodb+srv://', got '{}'",
             cfg.database.mongo_uri
         );
@@ -209,7 +213,11 @@ pub fn load() -> anyhow::Result<Config> {
         let client_id = std::env::var("DISCORD_APPLICATION_ID").unwrap_or_default();
         let client_secret = std::env::var("DISCORD_CLIENT_SECRET").unwrap_or_default();
         let admin_id = std::env::var("ADMIN_DISCORD_ID").unwrap_or_default();
-        let admin_ids = if admin_id.is_empty() { vec![] } else { vec![admin_id] };
+        let admin_ids = if admin_id.is_empty() {
+            vec![]
+        } else {
+            vec![admin_id]
+        };
         return Ok(Config {
             bot: BotConfig {
                 token,
@@ -357,8 +365,10 @@ port = 8080
 "#,
         )
         .unwrap();
-        assert!(!with_section.dashboard.enable_dashboard,
-            "enable_dashboard serde default must match Default impl (both false)");
+        assert!(
+            !with_section.dashboard.enable_dashboard,
+            "enable_dashboard serde default must match Default impl (both false)"
+        );
 
         // DashboardConfig::default() itself
         assert!(!DashboardConfig::default().enable_dashboard);
@@ -396,7 +406,10 @@ admin_ids = ["42"]
         assert_eq!(restored.bot.token, original.bot.token);
         assert_eq!(restored.bot.presence_type, original.bot.presence_type);
         assert_eq!(restored.database.mongo_uri, original.database.mongo_uri);
-        assert_eq!(restored.dashboard.enable_dashboard, original.dashboard.enable_dashboard);
+        assert_eq!(
+            restored.dashboard.enable_dashboard,
+            original.dashboard.enable_dashboard
+        );
         assert_eq!(restored.dashboard.port, original.dashboard.port);
         assert_eq!(restored.dashboard.admin_ids, original.dashboard.admin_ids);
     }
@@ -442,7 +455,10 @@ client_id = "123"
         std::env::set_current_dir(&original_dir).unwrap();
 
         let cfg = result.expect("load() must succeed even when config.toml is absent");
-        assert!(needs_setup(&cfg), "a missing config file should trigger setup mode");
+        assert!(
+            needs_setup(&cfg),
+            "a missing config file should trigger setup mode"
+        );
         assert_eq!(cfg.dashboard.port, DEFAULT_PORT);
         assert_eq!(cfg.bot.online_status, DEFAULT_ONLINE_STATUS);
     }

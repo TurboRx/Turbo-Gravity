@@ -31,10 +31,9 @@ pub async fn choose(
         .copied()
         .unwrap_or("¯\\_(ツ)_/¯");
 
-    let prompt = question
-        .map(|q| format!("**{q}**\n"))
-        .unwrap_or_default();
+    let prompt = question.map(|q| format!("**{q}**\n")).unwrap_or_default();
 
-    ctx.say(format!("{prompt}🎲 I choose: **{choice}**")).await?;
+    ctx.say(format!("{prompt}🎲 I choose: **{choice}**"))
+        .await?;
     Ok(())
 }

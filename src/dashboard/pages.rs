@@ -858,8 +858,8 @@ fn html_head(title: &str, extra_script: &str) -> String {
 
 fn build_sidebar(active: &str) -> String {
     let items: &[(&str, &str, &str)] = &[
-        ("home",     "Home",     "/dashboard"),
-        ("dns",      "Servers",  "/selector"),
+        ("home", "Home", "/dashboard"),
+        ("dns", "Servers", "/selector"),
         ("settings", "Settings", "/settings"),
     ];
     let nav: String = items
@@ -894,7 +894,11 @@ fn build_topbar(page_name: &str, username: &str) -> String {
         .filter_map(|p| p.chars().next())
         .map(|c| c.to_ascii_uppercase())
         .collect();
-    let initials = if initials.is_empty() { "TG".to_string() } else { initials };
+    let initials = if initials.is_empty() {
+        "TG".to_string()
+    } else {
+        initials
+    };
     let username_e = html_escape(username);
 
     format!(
@@ -955,47 +959,95 @@ fn html_foot() -> &'static str {
 // ---------------------------------------------------------------------------
 
 pub struct DashboardData {
-    pub bot_status:         &'static str,
-    pub command_scope:      String,
-    pub guild_id:           String,
-    pub invite_link:        String,
+    pub bot_status: &'static str,
+    pub command_scope: String,
+    pub guild_id: String,
+    pub invite_link: String,
     pub invite_permissions: String,
-    pub online_status:      String,
-    pub presence_text:      String,
-    pub presence_type:      u8,
+    pub online_status: String,
+    pub presence_text: String,
+    pub presence_type: u8,
     /// Number of guilds the bot is currently in (from state, updated on READY).
-    pub guild_count:        usize,
+    pub guild_count: usize,
     /// Discord username of the logged-in admin (shown in topbar).
-    pub username:           String,
+    pub username: String,
 }
 
 pub fn dashboard_page(data: &DashboardData) -> String {
-    let head          = html_head("Dashboard", DASHBOARD_SCRIPT);
-    let sidebar       = build_sidebar("Home");
-    let topbar        = build_topbar("Dashboard", &data.username);
-    let foot          = html_foot();
+    let head = html_head("Dashboard", DASHBOARD_SCRIPT);
+    let sidebar = build_sidebar("Home");
+    let topbar = build_topbar("Dashboard", &data.username);
+    let foot = html_foot();
 
-    let status_class  = if data.bot_status == "online" { "online" } else { "offline" };
-    let status_dot    = r#"<span class="status-dot"></span>"#;
-    let status_text   = html_escape(data.bot_status);
-    let invite_link   = html_escape(&data.invite_link);
-    let invite_perms  = html_escape(&data.invite_permissions);
-    let guild_id      = html_escape(&data.guild_id);
+    let status_class = if data.bot_status == "online" {
+        "online"
+    } else {
+        "offline"
+    };
+    let status_dot = r#"<span class="status-dot"></span>"#;
+    let status_text = html_escape(data.bot_status);
+    let invite_link = html_escape(&data.invite_link);
+    let invite_perms = html_escape(&data.invite_permissions);
+    let guild_id = html_escape(&data.guild_id);
     let presence_text = html_escape(&data.presence_text);
 
-    let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
-    let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
+    let scope_guild_sel = if data.command_scope != "global" {
+        " selected"
+    } else {
+        ""
+    };
+    let scope_global_sel = if data.command_scope == "global" {
+        " selected"
+    } else {
+        ""
+    };
 
-    let ps_online    = if data.online_status == "online"    { " selected" } else { "" };
-    let ps_dnd       = if data.online_status == "dnd"       { " selected" } else { "" };
-    let ps_idle      = if data.online_status == "idle"      { " selected" } else { "" };
-    let ps_invisible = if data.online_status == "invisible" { " selected" } else { "" };
+    let ps_online = if data.online_status == "online" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_dnd = if data.online_status == "dnd" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_idle = if data.online_status == "idle" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_invisible = if data.online_status == "invisible" {
+        " selected"
+    } else {
+        ""
+    };
 
-    let pp0 = if data.presence_type == 0 { " selected" } else { "" };
-    let pp1 = if data.presence_type == 1 { " selected" } else { "" };
-    let pp2 = if data.presence_type == 2 { " selected" } else { "" };
-    let pp3 = if data.presence_type == 3 { " selected" } else { "" };
-    let pp4 = if data.presence_type == 4 { " selected" } else { "" };
+    let pp0 = if data.presence_type == 0 {
+        " selected"
+    } else {
+        ""
+    };
+    let pp1 = if data.presence_type == 1 {
+        " selected"
+    } else {
+        ""
+    };
+    let pp2 = if data.presence_type == 2 {
+        " selected"
+    } else {
+        ""
+    };
+    let pp3 = if data.presence_type == 3 {
+        " selected"
+    } else {
+        ""
+    };
+    let pp4 = if data.presence_type == 4 {
+        " selected"
+    } else {
+        ""
+    };
 
     let guild_count_str = data.guild_count.to_string();
 
@@ -1305,60 +1357,108 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct SetupData {
-    pub token:          String,
-    pub owner_id:       String,
-    pub client_id:      String,
-    pub client_secret:  String,
-    pub callback_url:   String,
-    pub mongo_uri:      String,
+    pub token: String,
+    pub owner_id: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub callback_url: String,
+    pub mongo_uri: String,
     pub session_secret: String,
-    pub guild_id:       String,
-    pub port:           u16,
-    pub presence_type:  u8,
-    pub presence_text:  String,
-    pub command_scope:  String,
-    pub online_status:  String,
-    pub avatar_url:     String,
+    pub guild_id: String,
+    pub port: u16,
+    pub presence_type: u8,
+    pub presence_text: String,
+    pub command_scope: String,
+    pub online_status: String,
+    pub avatar_url: String,
 }
 
 pub fn setup_page(data: &SetupData) -> String {
     let head = html_head("Setup", DASHBOARD_SCRIPT);
     let foot = html_foot();
 
-    let scope_guild_sel  = if data.command_scope != "global" { " selected" } else { "" };
-    let scope_global_sel = if data.command_scope == "global" { " selected" } else { "" };
-    let p0 = if data.presence_type == 0 { " selected" } else { "" };
-    let p1 = if data.presence_type == 1 { " selected" } else { "" };
-    let p2 = if data.presence_type == 2 { " selected" } else { "" };
-    let p3 = if data.presence_type == 3 { " selected" } else { "" };
-    let p4 = if data.presence_type == 4 { " selected" } else { "" };
+    let scope_guild_sel = if data.command_scope != "global" {
+        " selected"
+    } else {
+        ""
+    };
+    let scope_global_sel = if data.command_scope == "global" {
+        " selected"
+    } else {
+        ""
+    };
+    let p0 = if data.presence_type == 0 {
+        " selected"
+    } else {
+        ""
+    };
+    let p1 = if data.presence_type == 1 {
+        " selected"
+    } else {
+        ""
+    };
+    let p2 = if data.presence_type == 2 {
+        " selected"
+    } else {
+        ""
+    };
+    let p3 = if data.presence_type == 3 {
+        " selected"
+    } else {
+        ""
+    };
+    let p4 = if data.presence_type == 4 {
+        " selected"
+    } else {
+        ""
+    };
 
-    let ps_online    = if data.online_status == "online"    { " selected" } else { "" };
-    let ps_dnd       = if data.online_status == "dnd"       { " selected" } else { "" };
-    let ps_idle      = if data.online_status == "idle"      { " selected" } else { "" };
-    let ps_invisible = if data.online_status == "invisible" { " selected" } else { "" };
+    let ps_online = if data.online_status == "online" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_dnd = if data.online_status == "dnd" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_idle = if data.online_status == "idle" {
+        " selected"
+    } else {
+        ""
+    };
+    let ps_invisible = if data.online_status == "invisible" {
+        " selected"
+    } else {
+        ""
+    };
 
     let callback_url = if data.callback_url.is_empty() {
         if data.port == crate::config::DEFAULT_PORT {
             crate::config::DEFAULT_CALLBACK_URL.to_string()
         } else {
-            format!("http://localhost:{}{}", data.port, crate::config::DEFAULT_CALLBACK_URL)
+            format!(
+                "http://localhost:{}{}",
+                data.port,
+                crate::config::DEFAULT_CALLBACK_URL
+            )
         }
     } else {
         data.callback_url.clone()
     };
 
-    let token          = html_escape(&data.token);
-    let client_id      = html_escape(&data.client_id);
-    let client_secret  = html_escape(&data.client_secret);
+    let token = html_escape(&data.token);
+    let client_id = html_escape(&data.client_id);
+    let client_secret = html_escape(&data.client_secret);
     let callback_url_e = html_escape(&callback_url);
-    let mongo_uri      = html_escape(&data.mongo_uri);
+    let mongo_uri = html_escape(&data.mongo_uri);
     let session_secret = html_escape(&data.session_secret);
-    let owner_id       = html_escape(&data.owner_id);
-    let guild_id       = html_escape(&data.guild_id);
-    let port           = data.port;
-    let presence_text  = html_escape(&data.presence_text);
-    let avatar_url     = html_escape(&data.avatar_url);
+    let owner_id = html_escape(&data.owner_id);
+    let guild_id = html_escape(&data.guild_id);
+    let port = data.port;
+    let presence_text = html_escape(&data.presence_text);
+    let avatar_url = html_escape(&data.avatar_url);
 
     format!(
         r#"{head}
@@ -1576,29 +1676,33 @@ pub fn setup_page(data: &SetupData) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct GuildInfo {
-    pub id:           String,
-    pub name:         String,
-    pub icon:         Option<String>,
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
     pub member_count: Option<u64>,
 }
 
 pub struct SelectorData {
-    pub username:    String,
-    pub guilds:      Vec<GuildInfo>,
-    pub bot_status:  &'static str,
+    pub username: String,
+    pub guilds: Vec<GuildInfo>,
+    pub bot_status: &'static str,
     /// Number of guilds from bot state (for display when guild list is empty).
     #[allow(dead_code)]
     pub guild_count: usize,
 }
 
 pub fn selector_page(data: &SelectorData) -> String {
-    let head    = html_head("Select Server", "");
+    let head = html_head("Select Server", "");
     let sidebar = build_sidebar("Servers");
-    let topbar  = build_topbar("Select Server", &data.username);
-    let foot    = html_foot();
+    let topbar = build_topbar("Select Server", &data.username);
+    let foot = html_foot();
 
-    let status_class = if data.bot_status == "online" { "online" } else { "offline" };
-    let username     = html_escape(&data.username);
+    let status_class = if data.bot_status == "online" {
+        "online"
+    } else {
+        "offline"
+    };
+    let username = html_escape(&data.username);
 
     let guild_cards: String = data
         .guilds
@@ -1664,7 +1768,7 @@ pub fn selector_page(data: &SelectorData) -> String {
 </div>
 </div>
 {foot}"#,
-        bot_status  = html_escape(data.bot_status),
+        bot_status = html_escape(data.bot_status),
     )
 }
 
@@ -1762,7 +1866,7 @@ pub fn setup_complete_page(dashboard_port: u16) -> String {
 
 pub struct SettingsData {
     pub username: String,
-    pub user_id:  String,
+    pub user_id: String,
 }
 
 fn compute_initials(username: &str) -> String {
@@ -1773,17 +1877,21 @@ fn compute_initials(username: &str) -> String {
         .filter_map(|p| p.chars().next())
         .map(|c| c.to_ascii_uppercase())
         .collect();
-    if initials.is_empty() { "TG".to_string() } else { initials }
+    if initials.is_empty() {
+        "TG".to_string()
+    } else {
+        initials
+    }
 }
 
 pub fn settings_page(data: &SettingsData) -> String {
-    let head    = html_head("Settings", "");
+    let head = html_head("Settings", "");
     let sidebar = build_sidebar("Settings");
-    let topbar  = build_topbar("Settings", &data.username);
-    let foot    = html_foot();
+    let topbar = build_topbar("Settings", &data.username);
+    let foot = html_foot();
 
     let username = html_escape(&data.username);
-    let user_id  = html_escape(&data.user_id);
+    let user_id = html_escape(&data.user_id);
 
     // Initials for the large profile avatar
     let initials = compute_initials(&data.username);
@@ -1848,7 +1956,7 @@ pub fn settings_page(data: &SettingsData) -> String {
 {foot}"#,
         initials = initials,
         username = username,
-        user_id  = user_id,
+        user_id = user_id,
     )
 }
 
@@ -1857,17 +1965,17 @@ pub fn settings_page(data: &SettingsData) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct ErrorData {
-    pub code:    u16,
-    pub title:   String,
+    pub code: u16,
+    pub title: String,
     pub message: String,
 }
 
 pub fn error_page(data: &ErrorData) -> String {
-    let head  = html_head("Error", "");
-    let foot  = html_foot();
-    let code  = data.code;
+    let head = html_head("Error", "");
+    let foot = html_foot();
+    let code = data.code;
     let title = html_escape(&data.title);
-    let msg   = html_escape(&data.message);
+    let msg = html_escape(&data.message);
 
     format!(
         r#"{head}
@@ -1891,12 +1999,12 @@ pub fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
         match ch {
-            '&'  => out.push_str("&amp;"),
-            '<'  => out.push_str("&lt;"),
-            '>'  => out.push_str("&gt;"),
-            '"'  => out.push_str("&quot;"),
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&#x27;"),
-            _    => out.push(ch),
+            _ => out.push(ch),
         }
     }
     out

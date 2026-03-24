@@ -31,7 +31,10 @@ pub async fn create(
     category: Option<serenity::GuildChannel>,
     #[description = "Staff role to notify and grant access"] staff_role: Option<serenity::Role>,
 ) -> Result<(), Error> {
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
 
     // Extract everything needed from the non-Send CacheRef before any await
     let (guild_id, everyone_role, bot_id, existing_ticket) = {
@@ -72,7 +75,13 @@ pub async fn create(
         .map(|d| d.get().to_string())
         .unwrap_or_else(|| {
             let id = ctx.author().id.to_string();
-            id.chars().rev().take(4).collect::<String>().chars().rev().collect()
+            id.chars()
+                .rev()
+                .take(4)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect()
         });
     let channel_name = format!("ticket-{safe_name}-{disc}")
         .chars()
@@ -138,7 +147,8 @@ pub async fn create(
     }
     channel.id.send_message(ctx, msg).await?;
 
-    ctx.say(format!("Ticket created: <#{}>", channel.id)).await?;
+    ctx.say(format!("Ticket created: <#{}>", channel.id))
+        .await?;
     Ok(())
 }
 
@@ -152,7 +162,10 @@ pub async fn close(
     #[max = 1440_u32]
     delete_after: Option<u32>,
 ) -> Result<(), Error> {
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
 
     // Extract @everyone RoleId before any await (CacheRef is !Send)
     let everyone_id = {
@@ -175,7 +188,8 @@ pub async fn close(
         .and_then(|t| extract_owner_id(t).map(str::to_string));
 
     if owner_id.is_none() {
-        ctx.say("This does not appear to be a ticket channel.").await?;
+        ctx.say("This does not appear to be a ticket channel.")
+            .await?;
         return Ok(());
     }
 
@@ -245,7 +259,8 @@ pub async fn add(
         .and_then(|t| extract_owner_id(t).map(str::to_string));
 
     if owner_id.is_none() {
-        ctx.say("This does not appear to be a ticket channel.").await?;
+        ctx.say("This does not appear to be a ticket channel.")
+            .await?;
         return Ok(());
     }
 
@@ -307,7 +322,8 @@ pub async fn remove(
         .and_then(|t| extract_owner_id(t).map(str::to_string));
 
     if owner_id.is_none() {
-        ctx.say("This does not appear to be a ticket channel.").await?;
+        ctx.say("This does not appear to be a ticket channel.")
+            .await?;
         return Ok(());
     }
 

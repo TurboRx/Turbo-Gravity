@@ -29,8 +29,7 @@ pub async fn remind(
 
     tokio::spawn(async move {
         tokio::time::sleep(delay).await;
-        let dm = serenity::CreateMessage::new()
-            .content(format!("⏰ **Reminder:** {message}"));
+        let dm = serenity::CreateMessage::new().content(format!("⏰ **Reminder:** {message}"));
         let _ = user.dm(&http, dm).await;
     });
 

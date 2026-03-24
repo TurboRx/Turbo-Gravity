@@ -34,16 +34,16 @@ pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
         &db,
         &author.id.to_string(),
         &author.name,
-        &author.discriminator.map(|d| d.to_string()).unwrap_or_default(),
+        &author
+            .discriminator
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
         author.avatar_url().as_deref(),
     )
     .await?;
 
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let last_ms = profile
-        .last_work
-        .map(|d| d.timestamp_millis())
-        .unwrap_or(0);
+    let last_ms = profile.last_work.map(|d| d.timestamp_millis()).unwrap_or(0);
     let elapsed_secs = (now_ms - last_ms) / 1000;
 
     if elapsed_secs < WORK_COOLDOWN_SECS {

@@ -10,8 +10,9 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
 
     msg.edit(
         ctx,
-        poise::CreateReply::default()
-            .content(format!("🏓 Pong! Roundtrip: {roundtrip_ms}ms | API ping: {api_ms}ms")),
+        poise::CreateReply::default().content(format!(
+            "🏓 Pong! Roundtrip: {roundtrip_ms}ms | API ping: {api_ms}ms"
+        )),
     )
     .await?;
     Ok(())

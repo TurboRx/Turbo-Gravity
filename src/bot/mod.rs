@@ -1,7 +1,7 @@
 pub mod commands;
 
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use poise::serenity_prelude as serenity;
@@ -121,12 +121,13 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
 
                     // Register commands guild-scoped or globally based on config
                     if cfg.command_scope == "guild" && !cfg.guild_id.is_empty() {
-                        let guild_id_num = cfg.guild_id
-                            .parse::<u64>()
-                            .map_err(|e| anyhow::anyhow!(
+                        let guild_id_num = cfg.guild_id.parse::<u64>().map_err(|e| {
+                            anyhow::anyhow!(
                                 "config.bot.guild_id '{}' must be a valid u64: {}",
-                                cfg.guild_id, e
-                            ))?;
+                                cfg.guild_id,
+                                e
+                            )
+                        })?;
                         let guild_id = serenity::GuildId::new(guild_id_num);
                         poise::builtins::register_in_guild(
                             ctx,
@@ -191,10 +192,10 @@ fn resolve_presence_text(text: &str, server_count: usize) -> String {
 /// Map the `online_status` config string to a serenity `OnlineStatus` variant.
 fn map_online_status(status: &str) -> serenity::OnlineStatus {
     match status {
-        "dnd"       => serenity::OnlineStatus::DoNotDisturb,
-        "idle"      => serenity::OnlineStatus::Idle,
+        "dnd" => serenity::OnlineStatus::DoNotDisturb,
+        "idle" => serenity::OnlineStatus::Idle,
         "invisible" => serenity::OnlineStatus::Invisible,
-        _           => serenity::OnlineStatus::Online,
+        _ => serenity::OnlineStatus::Online,
     }
 }
 
@@ -269,13 +270,19 @@ mod tests {
 
     #[test]
     fn map_online_status_variants() {
-        assert_eq!(map_online_status("online"),    serenity::OnlineStatus::Online);
-        assert_eq!(map_online_status("dnd"),       serenity::OnlineStatus::DoNotDisturb);
-        assert_eq!(map_online_status("idle"),      serenity::OnlineStatus::Idle);
-        assert_eq!(map_online_status("invisible"), serenity::OnlineStatus::Invisible);
+        assert_eq!(map_online_status("online"), serenity::OnlineStatus::Online);
+        assert_eq!(
+            map_online_status("dnd"),
+            serenity::OnlineStatus::DoNotDisturb
+        );
+        assert_eq!(map_online_status("idle"), serenity::OnlineStatus::Idle);
+        assert_eq!(
+            map_online_status("invisible"),
+            serenity::OnlineStatus::Invisible
+        );
         // Unknown values fall back to Online
-        assert_eq!(map_online_status(""),          serenity::OnlineStatus::Online);
-        assert_eq!(map_online_status("offline"),   serenity::OnlineStatus::Online);
+        assert_eq!(map_online_status(""), serenity::OnlineStatus::Online);
+        assert_eq!(map_online_status("offline"), serenity::OnlineStatus::Online);
     }
 
     #[test]

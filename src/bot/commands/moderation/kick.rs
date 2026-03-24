@@ -21,7 +21,10 @@ pub async fn kick(
             .ok_or_else(|| anyhow::anyhow!("Not in a guild"))?;
         guild.name.clone()
     };
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
 
     if member.user.id == ctx.author().id {
         ctx.say("You cannot kick yourself.").await?;
@@ -51,8 +54,9 @@ pub async fn kick(
     }
 
     // Try to DM before kicking
-    let dm = serenity::CreateMessage::new()
-        .content(format!("You were kicked from **{guild_name}** | Reason: {reason}"));
+    let dm = serenity::CreateMessage::new().content(format!(
+        "You were kicked from **{guild_name}** | Reason: {reason}"
+    ));
     let _ = member.user.dm(ctx, dm).await;
 
     member.kick_with_reason(ctx, &reason).await?;

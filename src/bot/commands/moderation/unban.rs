@@ -42,10 +42,7 @@ pub async fn unban(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to unban: {e}"))?;
 
-    ctx.say(format!(
-        "Unbanned {} | Reason: {reason}",
-        ban.user.name
-    ))
-    .await?;
+    ctx.say(format!("Unbanned {} | Reason: {reason}", ban.user.name))
+        .await?;
     Ok(())
 }

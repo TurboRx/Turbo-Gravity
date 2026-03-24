@@ -31,7 +31,12 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     let users: usize = cache
         .guilds()
         .iter()
-        .map(|g| cache.guild(*g).map(|g| g.member_count as usize).unwrap_or(0))
+        .map(|g| {
+            cache
+                .guild(*g)
+                .map(|g| g.member_count as usize)
+                .unwrap_or(0)
+        })
         .sum();
 
     let (bot_name, bot_face) = {

@@ -43,8 +43,10 @@ pub async fn embed(
 
     if let Some(img) = &image {
         if !is_valid_image_url(img) {
-            ctx.say("Invalid image URL. Must be a direct link ending in .png, .jpg, .gif, or .webp.")
-                .await?;
+            ctx.say(
+                "Invalid image URL. Must be a direct link ending in .png, .jpg, .gif, or .webp.",
+            )
+            .await?;
             return Ok(());
         }
         embed = embed.image(img.clone());

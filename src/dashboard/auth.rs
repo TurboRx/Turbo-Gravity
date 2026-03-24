@@ -17,9 +17,8 @@ use axum::{
     Json,
 };
 use oauth2::{
-    AuthUrl, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet, RedirectUrl,
-    Scope, TokenUrl,
-    basic::BasicClient,
+    basic::BasicClient, AuthUrl, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
+    RedirectUrl, Scope, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,11 +33,11 @@ use crate::state::{SessionInfo, SharedState};
 /// The two `EndpointSet` positions correspond to `HasAuthUrl` and `HasTokenUrl`
 /// being set via [`BasicClient::set_auth_uri`] and [`BasicClient::set_token_uri`].
 type DiscordOauthClient = BasicClient<
-    EndpointSet,     // HasAuthUrl
-    EndpointNotSet,  // HasDeviceAuthUrl
-    EndpointNotSet,  // HasIntrospectionUrl
-    EndpointNotSet,  // HasRevocationUrl
-    EndpointSet,     // HasTokenUrl
+    EndpointSet,    // HasAuthUrl
+    EndpointNotSet, // HasDeviceAuthUrl
+    EndpointNotSet, // HasIntrospectionUrl
+    EndpointNotSet, // HasRevocationUrl
+    EndpointSet,    // HasTokenUrl
 >;
 
 /// Build a Discord OAuth2 [`BasicClient`] using the supplied `redirect_uri`.
@@ -46,20 +45,33 @@ type DiscordOauthClient = BasicClient<
 /// The `client_id` and `client_secret` are read from env vars first
 /// (`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`), falling back to the values
 /// stored in the application config.
-fn build_oauth_client(state: &crate::state::AppState, redirect_uri: &str) -> anyhow::Result<DiscordOauthClient> {
-    let client_id = std::env::var("DISCORD_CLIENT_ID")
-        .unwrap_or_else(|_| state.config.bot.client_id.clone());
+fn build_oauth_client(
+    state: &crate::state::AppState,
+    redirect_uri: &str,
+) -> anyhow::Result<DiscordOauthClient> {
+    let client_id =
+        std::env::var("DISCORD_CLIENT_ID").unwrap_or_else(|_| state.config.bot.client_id.clone());
     let client_secret = std::env::var("DISCORD_CLIENT_SECRET")
         .unwrap_or_else(|_| state.config.dashboard.client_secret.clone());
 
     anyhow::ensure!(!client_id.is_empty(), "DISCORD_CLIENT_ID is not configured");
-    anyhow::ensure!(!client_secret.is_empty(), "DISCORD_CLIENT_SECRET is not configured");
-    anyhow::ensure!(!redirect_uri.is_empty(), "DISCORD_REDIRECT_URI is not configured");
+    anyhow::ensure!(
+        !client_secret.is_empty(),
+        "DISCORD_CLIENT_SECRET is not configured"
+    );
+    anyhow::ensure!(
+        !redirect_uri.is_empty(),
+        "DISCORD_REDIRECT_URI is not configured"
+    );
 
     let client = BasicClient::new(ClientId::new(client_id))
         .set_client_secret(ClientSecret::new(client_secret))
-        .set_auth_uri(AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string())?)
-        .set_token_uri(TokenUrl::new("https://discord.com/api/oauth2/token".to_string())?)
+        .set_auth_uri(AuthUrl::new(
+            "https://discord.com/api/oauth2/authorize".to_string(),
+        )?)
+        .set_token_uri(TokenUrl::new(
+            "https://discord.com/api/oauth2/token".to_string(),
+        )?)
         .set_redirect_uri(RedirectUrl::new(redirect_uri.to_string())?);
 
     Ok(client)
@@ -133,10 +145,7 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
 /// The OAuth2 redirect URI is resolved dynamically from request headers so that
 /// the dashboard works correctly on cloud deployments without
 /// requiring manual configuration of `DISCORD_REDIRECT_URI`.
-pub async fn login(
-    State(state): State<SharedState>,
-    headers: axum::http::HeaderMap,
-) -> Response {
+pub async fn login(State(state): State<SharedState>, headers: axum::http::HeaderMap) -> Response {
     let redirect_uri = detect_redirect_uri(&state, &headers);
 
     let client = match build_oauth_client(&state, &redirect_uri) {
@@ -215,7 +224,11 @@ pub async fn callback(
         Some(uri) => uri,
         None => {
             tracing::warn!("OAuth2 callback received invalid or expired CSRF state");
-            return (StatusCode::BAD_REQUEST, "Invalid or expired CSRF state. Please try logging in again.").into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                "Invalid or expired CSRF state. Please try logging in again.",
+            )
+                .into_response();
         }
     };
 
@@ -224,7 +237,11 @@ pub async fn callback(
         Ok(v) => v,
         Err(e) => {
             tracing::error!("OAuth2 client configuration error during callback: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "OAuth2 is not configured").into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "OAuth2 is not configured",
+            )
+                .into_response();
         }
     };
 
@@ -252,7 +269,11 @@ pub async fn callback(
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Discord token exchange HTTP error: {e}");
-            return (StatusCode::BAD_GATEWAY, "Failed to contact Discord's token endpoint").into_response();
+            return (
+                StatusCode::BAD_GATEWAY,
+                "Failed to contact Discord's token endpoint",
+            )
+                .into_response();
         }
     };
 
@@ -260,14 +281,22 @@ pub async fn callback(
         let status = token_resp.status();
         let body = token_resp.text().await.unwrap_or_default();
         tracing::error!("Discord token exchange failed ({status}): {body}");
-        return (StatusCode::UNAUTHORIZED, "Discord rejected the authorization code").into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Discord rejected the authorization code",
+        )
+            .into_response();
     }
 
     let token: DiscordTokenResponse = match token_resp.json().await {
         Ok(t) => t,
         Err(e) => {
             tracing::error!("Failed to deserialize Discord token response: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Unexpected response from Discord").into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unexpected response from Discord",
+            )
+                .into_response();
         }
     };
 
@@ -289,14 +318,22 @@ pub async fn callback(
         let status = user_resp.status();
         let body = user_resp.text().await.unwrap_or_default();
         tracing::error!("Discord user profile request failed ({status}): {body}");
-        return (StatusCode::UNAUTHORIZED, "Discord rejected the access token while fetching user profile").into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Discord rejected the access token while fetching user profile",
+        )
+            .into_response();
     }
 
     let discord_user: DiscordUser = match user_resp.json().await {
         Ok(u) => u,
         Err(e) => {
             tracing::error!("Failed to deserialize Discord user profile: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Unexpected response from Discord user API").into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unexpected response from Discord user API",
+            )
+                .into_response();
         }
     };
 
@@ -304,12 +341,17 @@ pub async fn callback(
     let admin_id = std::env::var("ADMIN_DISCORD_ID").unwrap_or_default();
     if admin_id.is_empty() {
         tracing::error!("ADMIN_DISCORD_ID is not set; denying all login attempts");
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Dashboard admin is not configured").into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Dashboard admin is not configured",
+        )
+            .into_response();
     }
     if discord_user.id != admin_id {
         tracing::warn!(
             "Login denied for Discord user {} ({}): not the configured admin",
-            discord_user.username, discord_user.id
+            discord_user.username,
+            discord_user.id
         );
         return (
             StatusCode::FORBIDDEN,
@@ -330,13 +372,20 @@ pub async fn callback(
                 sessions.remove(&oldest);
             }
         }
-        sessions.insert(session_id.clone(), SessionInfo {
-            user_id: discord_user.id.clone(),
-            username: discord_user.username.clone(),
-        });
+        sessions.insert(
+            session_id.clone(),
+            SessionInfo {
+                user_id: discord_user.id.clone(),
+                username: discord_user.username.clone(),
+            },
+        );
     }
 
-    tracing::info!("Admin {} ({}) logged in successfully", discord_user.username, discord_user.id);
+    tracing::info!(
+        "Admin {} ({}) logged in successfully",
+        discord_user.username,
+        discord_user.id
+    );
 
     // HttpOnly prevents JS access; SameSite=Lax prevents most CSRF attacks.
     // Secure ensures the cookie is only sent over HTTPS (important when deployed
@@ -357,10 +406,7 @@ pub async fn callback(
 // ---------------------------------------------------------------------------
 
 /// `POST /auth/logout` — invalidate the current session and redirect to /auth/login.
-pub async fn logout(
-    State(state): State<SharedState>,
-    request: axum::extract::Request,
-) -> Response {
+pub async fn logout(State(state): State<SharedState>, request: axum::extract::Request) -> Response {
     // Extract session_id from the Cookie header and remove it from the store.
     let session_id = request
         .headers()
@@ -493,8 +539,7 @@ pub async fn require_login_redirect(
     let session_id = match session_id {
         Some(id) => id,
         None => {
-            return (StatusCode::FOUND, [(header::LOCATION, "/auth/login")])
-                .into_response();
+            return (StatusCode::FOUND, [(header::LOCATION, "/auth/login")]).into_response();
         }
     };
 
@@ -563,7 +608,9 @@ mod tests {
         routing::get,
         Router,
     };
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use std::sync::LazyLock;
+    use tokio::sync::Mutex as TokioMutex;
     use tower::ServiceExt;
 
     use crate::{config, state};
@@ -571,7 +618,7 @@ mod tests {
     /// Global mutex serialising tests that read or write process environment
     /// variables.  `std::env::set_var` / `remove_var` are not thread-safe across
     /// parallel test threads; holding this lock prevents races.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_LOCK: LazyLock<TokioMutex<()>> = LazyLock::new(|| TokioMutex::new(()));
 
     /// RAII guard that removes a named environment variable when dropped,
     /// ensuring cleanup happens even if the test panics.
@@ -618,7 +665,12 @@ port = 8080
     #[tokio::test]
     async fn require_admin_rejects_missing_cookie() {
         let resp = guarded_app(test_state())
-            .oneshot(Request::builder().uri("/secret").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -643,14 +695,13 @@ port = 8080
     async fn require_admin_rejects_non_admin_session() {
         let state = test_state();
         // Register a session for a user who is NOT the admin.
-        state
-            .sessions
-            .lock()
-            .await
-            .insert("valid_session".to_string(), crate::state::SessionInfo {
+        state.sessions.lock().await.insert(
+            "valid_session".to_string(),
+            crate::state::SessionInfo {
                 user_id: "999999".to_string(),
                 username: "testuser".to_string(),
-            });
+            },
+        );
         // ADMIN_DISCORD_ID is not set, so "999999" will never match.
         let resp = guarded_app(Arc::clone(&state))
             .oneshot(
@@ -678,14 +729,13 @@ port = 8080
         let state = test_state();
         let admin_id = "777777777777777777";
         // Register the session
-        state
-            .sessions
-            .lock()
-            .await
-            .insert("admin_session".to_string(), crate::state::SessionInfo {
+        state.sessions.lock().await.insert(
+            "admin_session".to_string(),
+            crate::state::SessionInfo {
                 user_id: admin_id.to_string(),
                 username: "admin".to_string(),
-            });
+            },
+        );
 
         // Set the env var so the middleware can verify the admin.
         // Use ENV_LOCK to prevent concurrent tests from seeing a stale value.
@@ -693,7 +743,7 @@ port = 8080
         // NOTE: _lock_guard must be declared BEFORE _env_guard so that it is
         // dropped AFTER _env_guard (Rust drops in reverse declaration order).
         // This ensures the env var is removed while the lock is still held.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("ADMIN_DISCORD_ID");
         std::env::set_var("ADMIN_DISCORD_ID", admin_id);
 
@@ -743,13 +793,16 @@ port = 8080
         map
     }
 
-    #[test]
-    fn detect_redirect_uri_uses_env_var_override() {
+    #[tokio::test]
+    async fn detect_redirect_uri_uses_env_var_override() {
         // DISCORD_REDIRECT_URI env var takes priority over any headers.
         // _lock_guard declared first so it drops LAST (after _env_guard).
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
-        std::env::set_var("DISCORD_REDIRECT_URI", "https://override.example.com/auth/callback");
+        std::env::set_var(
+            "DISCORD_REDIRECT_URI",
+            "https://override.example.com/auth/callback",
+        );
         let state = test_state();
         let headers = make_headers(&[
             ("x-forwarded-proto", "https"),
@@ -759,11 +812,11 @@ port = 8080
         assert_eq!(uri, "https://override.example.com/auth/callback");
     }
 
-    #[test]
-    fn detect_redirect_uri_auto_detects_from_forwarded_headers() {
+    #[tokio::test]
+    async fn detect_redirect_uri_auto_detects_from_forwarded_headers() {
         // When DISCORD_REDIRECT_URI is absent but X-Forwarded-Proto + Host are
         // present, the URI should be built from those headers.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();
@@ -775,9 +828,9 @@ port = 8080
         assert_eq!(uri, "https://mybot.example.com/auth/callback");
     }
 
-    #[test]
-    fn detect_redirect_uri_prefers_x_forwarded_host_over_host() {
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    #[tokio::test]
+    async fn detect_redirect_uri_prefers_x_forwarded_host_over_host() {
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();
@@ -790,10 +843,10 @@ port = 8080
         assert_eq!(uri, "https://public.example.com/auth/callback");
     }
 
-    #[test]
-    fn detect_redirect_uri_accepts_multi_value_forwarded_proto() {
+    #[tokio::test]
+    async fn detect_redirect_uri_accepts_multi_value_forwarded_proto() {
         // X-Forwarded-Proto may be a comma-separated list; only the first value is used.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();
@@ -805,11 +858,11 @@ port = 8080
         assert_eq!(uri, "https://mybot.example.com/auth/callback");
     }
 
-    #[test]
-    fn detect_redirect_uri_falls_back_to_config_when_no_forwarded_proto() {
+    #[tokio::test]
+    async fn detect_redirect_uri_falls_back_to_config_when_no_forwarded_proto() {
         // Without X-Forwarded-Proto the function must not construct an http://
         // URL from the Host header alone — it must use the configured callback URL.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();
@@ -819,26 +872,23 @@ port = 8080
         assert_eq!(uri, state.config.dashboard.callback_url);
     }
 
-    #[test]
-    fn detect_redirect_uri_ignores_unknown_scheme() {
+    #[tokio::test]
+    async fn detect_redirect_uri_ignores_unknown_scheme() {
         // An X-Forwarded-Proto value other than http/https must not be used to
         // construct a redirect URI; fall through to config fallback.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();
-        let headers = make_headers(&[
-            ("x-forwarded-proto", "ftp"),
-            ("host", "mybot.example.com"),
-        ]);
+        let headers = make_headers(&[("x-forwarded-proto", "ftp"), ("host", "mybot.example.com")]);
         let uri = detect_redirect_uri(&state, &headers);
         assert_eq!(uri, state.config.dashboard.callback_url);
     }
 
-    #[test]
-    fn detect_redirect_uri_falls_back_to_config_when_host_empty() {
+    #[tokio::test]
+    async fn detect_redirect_uri_falls_back_to_config_when_host_empty() {
         // X-Forwarded-Proto is valid but Host is empty — should not build a malformed URI.
-        let _lock_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock_guard = ENV_LOCK.lock().await;
         let _env_guard = EnvVarGuard("DISCORD_REDIRECT_URI");
         std::env::remove_var("DISCORD_REDIRECT_URI");
         let state = test_state();

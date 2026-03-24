@@ -81,7 +81,10 @@ impl User {
             .return_document(ReturnDocument::After)
             .build();
 
-        let result = col.find_one_and_update(filter, update).with_options(options).await?;
+        let result = col
+            .find_one_and_update(filter, update)
+            .with_options(options)
+            .await?;
         result.ok_or_else(|| anyhow::anyhow!("find_one_and_update with upsert returned None"))
     }
 

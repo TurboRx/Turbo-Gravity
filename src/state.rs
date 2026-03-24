@@ -56,9 +56,7 @@ impl AppState {
 
     /// Returns a reference to the MongoDB database, or `None` if no DB is configured.
     pub fn database(&self) -> Option<mongodb::Database> {
-        self.db
-            .as_ref()
-            .map(|c| c.database("turbo_gravity"))
+        self.db.as_ref().map(|c| c.database("turbo_gravity"))
     }
 }
 
