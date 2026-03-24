@@ -32,6 +32,9 @@ pub struct BotConfig {
     /// Optional URL to a bot avatar image (fetched and applied at startup).
     #[serde(default)]
     pub avatar_url: String,
+    /// URL used when `presence_type = 1` (Streaming). Must be a Twitch or YouTube URL.
+    #[serde(default)]
+    pub presence_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -220,6 +223,7 @@ pub fn load() -> anyhow::Result<Config> {
                 presence_type: 0,
                 online_status: DEFAULT_ONLINE_STATUS.to_string(),
                 avatar_url: String::new(),
+                presence_url: String::new(),
             },
             database: DatabaseConfig::default(),
             dashboard: DashboardConfig {
@@ -294,6 +298,7 @@ client_id = "123456"
         assert_eq!(cfg.bot.presence_type, 0);
         assert_eq!(cfg.bot.online_status, "online");
         assert!(cfg.bot.avatar_url.is_empty());
+        assert!(cfg.bot.presence_url.is_empty());
         assert!(cfg.database.mongo_uri.is_empty());
         // No [dashboard] section → Default impl → enable_dashboard = false
         assert!(!cfg.dashboard.enable_dashboard);

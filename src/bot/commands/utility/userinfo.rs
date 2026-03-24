@@ -42,7 +42,11 @@ pub async fn userinfo(
                 true,
             );
         }
-        let roles: Vec<String> = m
+
+        let is_booster = m.premium_since.is_some();
+        embed = embed.field("Server Booster", if is_booster { "Yes" } else { "No" }, true);
+
+        let mut roles: Vec<(i64, serenity::RoleId)> = m
             .roles(ctx)
             .map(|roles| {
                 roles
@@ -52,17 +56,54 @@ pub async fn userinfo(
                             .map(|gid| r.id != gid.everyone_role())
                             .unwrap_or(true)
                     })
-                    .map(|r| format!("<@&{}>", r.id))
+                    .map(|r| (r.position, r.id))
                     .collect()
             })
             .unwrap_or_default();
 
-        let roles_str = if roles.is_empty() {
+        roles.sort_by(|a, b| b.0.cmp(&a.0));
+
+        const MAX_ROLES_SHOWN: usize = 10;
+        let total_roles = roles.len();
+        let shown: Vec<String> = roles
+            .iter()
+            .take(MAX_ROLES_SHOWN)
+            .map(|(_, id)| format!("<@&{id}>"))
+            .collect();
+
+        let roles_str = if shown.is_empty() {
+            "None".to_string()
+        } else if total_roles > MAX_ROLES_SHOWN {
+            format!("{} (+{} more)", shown.join(", "), total_roles - MAX_ROLES_SHOWN)
+        } else {
+            shown.join(", ")
+        };
+        embed = embed.field(format!("Roles [{total_roles}]"), roles_str, false);
+
+        let perms = m
+            .permissions(ctx)
+            .unwrap_or(serenity::Permissions::empty());
+
+        let mut key_perms: Vec<&str> = Vec::new();
+        if perms.administrator() {
+            key_perms.push("Administrator");
+        } else {
+            if perms.manage_guild() { key_perms.push("Manage Server"); }
+            if perms.manage_channels() { key_perms.push("Manage Channels"); }
+            if perms.manage_roles() { key_perms.push("Manage Roles"); }
+            if perms.manage_messages() { key_perms.push("Manage Messages"); }
+            if perms.kick_members() { key_perms.push("Kick Members"); }
+            if perms.ban_members() { key_perms.push("Ban Members"); }
+            if perms.moderate_members() { key_perms.push("Timeout Members"); }
+            if perms.mention_everyone() { key_perms.push("Mention Everyone"); }
+        }
+
+        let perms_str = if key_perms.is_empty() {
             "None".to_string()
         } else {
-            roles.join(", ")
+            key_perms.join(", ")
         };
-        embed = embed.field("Roles", roles_str, false);
+        embed = embed.field("Key Permissions", perms_str, false);
     }
 
     ctx.send(poise::CreateReply::default().embed(embed)).await?;

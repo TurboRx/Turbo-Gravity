@@ -5,10 +5,25 @@ use poise::serenity_prelude as serenity;
 #[poise::command(slash_command, ephemeral, guild_only)]
 pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
     // Extract all data we need from the non-Send CacheRef before any await
-    let (owner_id, member_count, guild_id, guild_name, icon_url, text_count, voice_count, created_ts) = {
+    let (
+        owner_id,
+        member_count,
+        guild_id,
+        guild_name,
+        icon_url,
+        text_count,
+        voice_count,
+        role_count,
+        emoji_count,
+        sticker_count,
+        boost_count,
+        boost_tier,
+        created_ts,
+    ) = {
         let guild = ctx
             .guild()
             .ok_or_else(|| anyhow::anyhow!("Not in a guild"))?;
+
         let text = guild
             .channels
             .values()
@@ -24,6 +39,14 @@ pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
                 )
             })
             .count();
+
+        let boost_tier = match guild.premium_tier {
+            serenity::PremiumTier::Tier1 => "Tier 1",
+            serenity::PremiumTier::Tier2 => "Tier 2",
+            serenity::PremiumTier::Tier3 => "Tier 3",
+            _ => "None",
+        };
+
         (
             guild.owner_id,
             guild.member_count,
@@ -32,6 +55,11 @@ pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
             guild.icon_url(),
             text,
             voice,
+            guild.roles.len(),
+            guild.emojis.len(),
+            guild.stickers.len(),
+            guild.premium_subscription_count.unwrap_or(0),
+            boost_tier,
             guild.id.created_at().unix_timestamp(),
         )
     };
@@ -57,6 +85,11 @@ pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
             format!("{text_count} text | {voice_count} voice"),
             true,
         )
+        .field("Roles", role_count.to_string(), true)
+        .field("Emojis", emoji_count.to_string(), true)
+        .field("Stickers", sticker_count.to_string(), true)
+        .field("Boost Tier", boost_tier, true)
+        .field("Boosts", boost_count.to_string(), true)
         .field("Created", format!("<t:{created_ts}:F>"), true);
 
     if let Some(icon) = icon_url {

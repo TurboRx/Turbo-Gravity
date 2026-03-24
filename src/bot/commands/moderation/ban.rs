@@ -19,11 +19,39 @@ pub async fn ban(
     #[description = "Reason for ban"] reason: Option<String>,
 ) -> Result<(), Error> {
     // Extract non-Send data from the cache guard before any await points
-    let (guild_id, guild_name) = {
+    let (guild_id, guild_name, bot_top, invoker_top, target_top) = {
         let guild = ctx
             .guild()
             .ok_or_else(|| anyhow::anyhow!("Not in a guild"))?;
-        (guild.id, guild.name.clone())
+
+        let bot_id = ctx.cache().current_user().id;
+
+        let role_top = |member: &serenity::Member| {
+            guild
+                .member_highest_role(member)
+                .map(|r| r.position)
+                .unwrap_or(0)
+        };
+
+        let bot_top = guild
+            .members
+            .get(&bot_id)
+            .map(|m| role_top(m))
+            .unwrap_or(0);
+
+        let invoker_top = guild
+            .members
+            .get(&ctx.author().id)
+            .map(|m| role_top(m))
+            .unwrap_or(0);
+
+        let target_top = guild
+            .members
+            .get(&user.id)
+            .map(|m| role_top(m))
+            .unwrap_or(0);
+
+        (guild.id, guild.name.clone(), bot_top, invoker_top, target_top)
     };
 
     let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
@@ -38,30 +66,22 @@ pub async fn ban(
         return Ok(());
     }
 
-    // Check role hierarchy if target is a member of the guild
-    if let Ok(target_member) = guild_id.member(ctx, user.id).await {
-        let invoker = ctx.author_member().await;
-        if let Some(invoker) = invoker {
-            let invoker_top = invoker
-                .roles(ctx)
-                .map(|roles| roles.iter().map(|r| r.position).max().unwrap_or(0))
-                .unwrap_or(0);
-            let target_top = target_member
-                .roles(ctx)
-                .map(|roles| roles.iter().map(|r| r.position).max().unwrap_or(0))
-                .unwrap_or(0);
-            if invoker_top <= target_top {
-                ctx.say("You cannot ban someone with an equal or higher role.")
-                    .await?;
-                return Ok(());
-            }
-        }
-
-        // Try to DM the target before banning
-        let dm = serenity::CreateMessage::new()
-            .content(format!("You were banned from **{guild_name}** | Reason: {reason}"));
-        let _ = user.dm(ctx, dm).await;
+    if invoker_top <= target_top {
+        ctx.say("You cannot ban someone with an equal or higher role.")
+            .await?;
+        return Ok(());
     }
+
+    if bot_top <= target_top {
+        ctx.say("I cannot ban that user — they have an equal or higher role than me.")
+            .await?;
+        return Ok(());
+    }
+
+    // Try to DM the target before banning
+    let dm = serenity::CreateMessage::new()
+        .content(format!("You were banned from **{guild_name}** | Reason: {reason}"));
+    let _ = user.dm(ctx, dm).await;
 
     guild_id
         .ban_with_reason(ctx, user.id, delete_days, &reason)

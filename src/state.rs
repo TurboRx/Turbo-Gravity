@@ -39,6 +39,8 @@ pub struct AppState {
     pub bot_online: AtomicBool,
     /// Number of guilds the bot is currently a member of (updated on READY).
     pub guild_count: AtomicUsize,
+    /// Instant at which the process started — used to compute bot uptime.
+    pub start_time: std::time::Instant,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
             oauth_states: Mutex::new(HashMap::new()),
             bot_online: AtomicBool::new(false),
             guild_count: AtomicUsize::new(0),
+            start_time: std::time::Instant::now(),
         }
     }
 

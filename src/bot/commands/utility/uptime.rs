@@ -38,10 +38,21 @@ fn system_uptime_secs() -> Option<u64> {
 pub async fn uptime(ctx: Context<'_>) -> Result<(), Error> {
     let api_ms = ctx.ping().await.as_millis();
 
+    let bot_uptime_secs = ctx.data().start_time.elapsed().as_secs();
+
+    let ws_latency_str = ctx
+        .serenity_context()
+        .shard
+        .latency()
+        .map(|d| format!("{}ms", d.as_millis()))
+        .unwrap_or_else(|| "N/A".to_string());
+
     let mut embed = serenity::CreateEmbed::new()
         .title("Uptime")
         .colour(serenity::Colour::from_rgb(34, 197, 94))
-        .field("📡 API Ping", format!("{api_ms}ms"), true);
+        .field("🤖 Bot Uptime", format_duration(bot_uptime_secs), true)
+        .field("📡 API Ping", format!("{api_ms}ms"), true)
+        .field("🔌 WS Latency", ws_latency_str, true);
 
     if let Some(secs) = system_uptime_secs() {
         embed = embed.field("⏱ System Uptime", format_duration(secs), true);

@@ -21,10 +21,24 @@ pub async fn purge(
         .messages(ctx, serenity::GetMessages::new().limit(amount))
         .await?;
 
-    let ids: Vec<serenity::MessageId> = messages.iter().map(|m| m.id).collect();
-    let count = ids.len();
+    let cutoff = serenity::Timestamp::now().unix_timestamp() - 14 * 24 * 60 * 60;
+    let ids: Vec<serenity::MessageId> = messages
+        .iter()
+        .filter(|m| m.timestamp.unix_timestamp() > cutoff)
+        .map(|m| m.id)
+        .collect();
 
-    ctx.channel_id().delete_messages(ctx, &ids).await?;
+    if ids.is_empty() {
+        ctx.say("No messages to delete (all are older than 14 days).").await?;
+        return Ok(());
+    }
+
+    let count = ids.len();
+    if let Err(e) = ctx.channel_id().delete_messages(ctx, &ids).await {
+        tracing::error!("Failed to bulk-delete messages: {e}");
+        ctx.say("Failed to delete messages. Please check my permissions.").await?;
+        return Ok(());
+    }
 
     ctx.say(format!("Deleted {count} messages.")).await?;
     Ok(())

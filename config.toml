@@ -10,6 +10,7 @@ guild_id = ""        # Guild ID for guild-scoped command registration (leave emp
 command_scope = "global"   # "guild" or "global"
 presence_text = "Ready to serve"
 presence_type = 0    # 0=Playing, 1=Streaming, 2=Listening, 3=Watching, 4=Competing
+presence_url = ""    # Twitch or YouTube URL used when presence_type = 1 (Streaming)
 
 [database]
 mongo_uri = ""       # MongoDB connection string (leave empty to run without DB)

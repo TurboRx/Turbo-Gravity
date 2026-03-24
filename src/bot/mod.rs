@@ -152,7 +152,7 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                     let presence_text = resolve_presence_text(&cfg.presence_text, server_count);
 
                     // Set initial bot presence using configured online status
-                    let activity = presence_activity(cfg.presence_type, &presence_text);
+                    let activity = presence_activity(cfg.presence_type, &presence_text, &cfg.presence_url);
                     let online_status = map_online_status(&cfg.online_status);
                     ctx.set_presence(Some(activity), online_status);
 
@@ -199,9 +199,9 @@ fn map_online_status(status: &str) -> serenity::OnlineStatus {
 }
 
 /// Map a presence type integer to the correct serenity `ActivityData` variant.
-fn presence_activity(presence_type: u8, text: &str) -> serenity::ActivityData {
+fn presence_activity(presence_type: u8, text: &str, url: &str) -> serenity::ActivityData {
     match presence_type {
-        1 => serenity::ActivityData::streaming(text, "")
+        1 => serenity::ActivityData::streaming(text, url)
             .unwrap_or_else(|_| serenity::ActivityData::playing(text)),
         2 => serenity::ActivityData::listening(text),
         3 => serenity::ActivityData::watching(text),
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn presence_type_0_is_playing() {
-        let a = presence_activity(0, "test");
+        let a = presence_activity(0, "test", "");
         assert_eq!(a.name, "test");
         // Playing maps to ActivityType::Playing (0)
         assert_eq!(a.kind, serenity::ActivityType::Playing);
@@ -224,28 +224,28 @@ mod tests {
 
     #[test]
     fn presence_type_2_is_listening() {
-        let a = presence_activity(2, "lofi beats");
+        let a = presence_activity(2, "lofi beats", "");
         assert_eq!(a.name, "lofi beats");
         assert_eq!(a.kind, serenity::ActivityType::Listening);
     }
 
     #[test]
     fn presence_type_3_is_watching() {
-        let a = presence_activity(3, "a stream");
+        let a = presence_activity(3, "a stream", "");
         assert_eq!(a.kind, serenity::ActivityType::Watching);
     }
 
     #[test]
     fn presence_type_4_is_competing() {
-        let a = presence_activity(4, "a tournament");
+        let a = presence_activity(4, "a tournament", "");
         assert_eq!(a.kind, serenity::ActivityType::Competing);
     }
 
     #[test]
     fn presence_type_1_with_empty_url_falls_back_to_playing() {
-        // The function passes "" as the streaming URL.  An empty string is not a
-        // valid URL so serenity returns an error and the fallback (Playing) is used.
-        let a = presence_activity(1, "a stream");
+        // An empty string is not a valid URL so serenity returns an error and
+        // the fallback (Playing) is used.
+        let a = presence_activity(1, "a stream", "");
         assert_eq!(a.name, "a stream");
         assert_eq!(a.kind, serenity::ActivityType::Playing);
     }
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn presence_type_unknown_defaults_to_playing() {
-        let a = presence_activity(99, "something");
+        let a = presence_activity(99, "something", "");
         assert_eq!(a.kind, serenity::ActivityType::Playing);
     }
 
