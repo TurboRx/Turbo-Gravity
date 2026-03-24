@@ -5,7 +5,16 @@ use poise::serenity_prelude as serenity;
 #[poise::command(slash_command, ephemeral, guild_only)]
 pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
     // Extract all data we need from the non-Send CacheRef before any await
-    let (owner_id, member_count, guild_id, guild_name, icon_url, text_count, voice_count, created_ts) = {
+    let (
+        owner_id,
+        member_count,
+        guild_id,
+        guild_name,
+        icon_url,
+        text_count,
+        voice_count,
+        created_ts,
+    ) = {
         let guild = ctx
             .guild()
             .ok_or_else(|| anyhow::anyhow!("Not in a guild"))?;

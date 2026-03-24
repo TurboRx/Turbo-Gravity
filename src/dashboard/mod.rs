@@ -31,14 +31,12 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let admin_guard = axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_admin);
     // require_login_redirect protects HTML pages: redirects unauthenticated
     // visitors to /auth/login rather than returning a JSON error.
-    let login_guard = axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_login_redirect);
+    let login_guard =
+        axum::middleware::from_fn_with_state(Arc::clone(&state), auth::require_login_redirect);
 
-    let config_routes = routes::config_router()
-        .route_layer(admin_guard.clone());
-    let admin_routes = routes::admin_router()
-        .route_layer(admin_guard);
-    let protected_pages = routes::protected_html_router()
-        .route_layer(login_guard);
+    let config_routes = routes::config_router().route_layer(admin_guard.clone());
+    let admin_routes = routes::admin_router().route_layer(admin_guard);
+    let protected_pages = routes::protected_html_router().route_layer(login_guard);
 
     let app = Router::new()
         // Public routes (setup wizard, health, control, etc.)

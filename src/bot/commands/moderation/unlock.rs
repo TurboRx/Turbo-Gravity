@@ -12,7 +12,10 @@ pub async fn unlock(
     ctx: Context<'_>,
     #[description = "Reason for unlocking the channel"] reason: Option<String>,
 ) -> Result<(), Error> {
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
 
     // Extract @everyone RoleId before any await
     let everyone_id = {

@@ -29,10 +29,7 @@ pub async fn balance(
         }
         Some(p) => {
             let embed = serenity::CreateEmbed::new()
-                .author(
-                    serenity::CreateEmbedAuthor::new(user.name.clone())
-                        .icon_url(user.face()),
-                )
+                .author(serenity::CreateEmbedAuthor::new(user.name.clone()).icon_url(user.face()))
                 .colour(serenity::Colour::from_rgb(245, 158, 11))
                 .field("💰 Coins", p.balance.to_string(), true)
                 .field("⭐ XP", p.xp.to_string(), true)

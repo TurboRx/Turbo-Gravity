@@ -1,9 +1,7 @@
 use crate::bot::{Context, Error};
 use poise::serenity_prelude as serenity;
 
-const NUMBER_EMOJIS: &[&str] = &[
-    "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
-];
+const NUMBER_EMOJIS: &[&str] = &["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 
 /// Create a quick reaction poll
 #[poise::command(slash_command)]
@@ -39,9 +37,7 @@ pub async fn poll(
             ctx.author().name
         )));
 
-    let reply = ctx
-        .send(poise::CreateReply::default().embed(embed))
-        .await?;
+    let reply = ctx.send(poise::CreateReply::default().embed(embed)).await?;
 
     if let Ok(msg) = reply.message().await {
         for emoji in NUMBER_EMOJIS.iter().take(options.len()) {

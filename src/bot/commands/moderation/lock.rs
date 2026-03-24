@@ -12,7 +12,10 @@ pub async fn lock(
     ctx: Context<'_>,
     #[description = "Reason for locking the channel"] reason: Option<String>,
 ) -> Result<(), Error> {
-    let reason = reason.as_deref().unwrap_or("No reason provided").to_string();
+    let reason = reason
+        .as_deref()
+        .unwrap_or("No reason provided")
+        .to_string();
 
     // Extract @everyone RoleId before any await (CacheRef is !Send)
     let everyone_id = {
@@ -35,7 +38,10 @@ pub async fn lock(
         .iter()
         .find(|o| o.kind == serenity::PermissionOverwriteType::Role(everyone_id))
     {
-        if overwrite.deny.contains(serenity::Permissions::SEND_MESSAGES) {
+        if overwrite
+            .deny
+            .contains(serenity::Permissions::SEND_MESSAGES)
+        {
             ctx.say("Channel is already locked.").await?;
             return Ok(());
         }
@@ -53,6 +59,7 @@ pub async fn lock(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to lock channel: {e}"))?;
 
-    ctx.say(format!("🔒 Channel locked. Reason: {reason}")).await?;
+    ctx.say(format!("🔒 Channel locked. Reason: {reason}"))
+        .await?;
     Ok(())
 }

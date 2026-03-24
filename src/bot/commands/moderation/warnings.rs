@@ -64,7 +64,10 @@ pub async fn warnings(
             let ts = bson_dt_to_chrono(w.created_at).timestamp();
             embed = embed.field(
                 format!("#{} — <t:{ts}:R>", page * PER_PAGE + i as u64 + 1),
-                format!("**Reason:** {}\n**Moderator:** <@{}>", w.reason, w.moderator_id),
+                format!(
+                    "**Reason:** {}\n**Moderator:** <@{}>",
+                    w.reason, w.moderator_id
+                ),
                 false,
             );
         }

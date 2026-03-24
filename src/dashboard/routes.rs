@@ -8,10 +8,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::pages::{self, DashboardData, ErrorData, SelectorData, SettingsData, SetupData};
 use crate::state::SharedState;
-use super::pages::{
-    self, DashboardData, ErrorData, SelectorData, SetupData, SettingsData,
-};
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -115,10 +113,7 @@ async fn root(State(state): State<SharedState>) -> Response {
 }
 
 /// GET /dashboard — main control-panel page
-async fn dashboard_page(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-) -> Html<String> {
+async fn dashboard_page(State(state): State<SharedState>, headers: HeaderMap) -> Html<String> {
     let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
@@ -167,7 +162,13 @@ async fn setup_page(State(state): State<SharedState>) -> Response {
     }
     let data = SetupData {
         token: state.config.bot.token.clone(),
-        owner_id: state.config.dashboard.admin_ids.first().cloned().unwrap_or_default(),
+        owner_id: state
+            .config
+            .dashboard
+            .admin_ids
+            .first()
+            .cloned()
+            .unwrap_or_default(),
         client_id: state.config.bot.client_id.clone(),
         client_secret: state.config.dashboard.client_secret.clone(),
         callback_url: state.config.dashboard.callback_url.clone(),
@@ -185,10 +186,7 @@ async fn setup_page(State(state): State<SharedState>) -> Response {
 }
 
 /// GET /selector — guild selector page
-async fn selector_page(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-) -> Html<String> {
+async fn selector_page(State(state): State<SharedState>, headers: HeaderMap) -> Html<String> {
     let bot_status = if state.bot_online.load(std::sync::atomic::Ordering::Relaxed) {
         "online"
     } else {
@@ -209,10 +207,7 @@ async fn selector_page(
 }
 
 /// GET /settings — user profile & logout page
-async fn settings_page(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-) -> Html<String> {
+async fn settings_page(State(state): State<SharedState>, headers: HeaderMap) -> Html<String> {
     let session = super::auth::current_session(&state, &headers).await;
     let (username, user_id) = session
         .map(|s| (s.username, s.user_id))
@@ -283,7 +278,9 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
         let data = ErrorData {
             code: 403,
             title: "Forbidden".to_string(),
-            message: "Setup is already complete. Use the dashboard settings to modify configuration.".to_string(),
+            message:
+                "Setup is already complete. Use the dashboard settings to modify configuration."
+                    .to_string(),
         };
         return (StatusCode::FORBIDDEN, Html(pages::error_page(&data))).into_response();
     }
@@ -329,7 +326,10 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             let data = ErrorData {
                 code: 400,
                 title: "Invalid Admin ID".to_string(),
-                message: format!("Admin ID '{}' must be a valid Discord snowflake (numeric)", admin_id),
+                message: format!(
+                    "Admin ID '{}' must be a valid Discord snowflake (numeric)",
+                    admin_id
+                ),
             };
             return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
         }
@@ -340,7 +340,10 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
         let data = ErrorData {
             code: 400,
             title: "Invalid Client ID".to_string(),
-            message: format!("Client ID must be a valid Discord snowflake (numeric), got '{}'", form.client_id),
+            message: format!(
+                "Client ID must be a valid Discord snowflake (numeric), got '{}'",
+                form.client_id
+            ),
         };
         return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
     }
@@ -350,7 +353,10 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
         let data = ErrorData {
             code: 400,
             title: "Invalid Guild ID".to_string(),
-            message: format!("Guild ID must be a valid Discord snowflake (numeric), got '{}'", form.guild_id),
+            message: format!(
+                "Guild ID must be a valid Discord snowflake (numeric), got '{}'",
+                form.guild_id
+            ),
         };
         return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
     }
@@ -358,7 +364,8 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
     // Validate MongoDB URI if provided
     if !form.mongo_uri.trim().is_empty()
         && !form.mongo_uri.starts_with("mongodb://")
-        && !form.mongo_uri.starts_with("mongodb+srv://") {
+        && !form.mongo_uri.starts_with("mongodb+srv://")
+    {
         let data = ErrorData {
             code: 400,
             title: "Invalid MongoDB URI".to_string(),
@@ -385,7 +392,10 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
         let data = ErrorData {
             code: 400,
             title: "Invalid Command Scope".to_string(),
-            message: format!("Command scope must be 'guild' or 'global', got '{}'", form.command_scope),
+            message: format!(
+                "Command scope must be 'guild' or 'global', got '{}'",
+                form.command_scope
+            ),
         };
         return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
     };
@@ -431,14 +441,18 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             // automatically start the bot without any manual intervention.
             state.setup_complete.notify_one();
             Html(pages::setup_complete_page(port)).into_response()
-        },
+        }
         Err(e) => {
             let data = ErrorData {
                 code: 500,
                 title: "Setup Failed".to_string(),
                 message: format!("Could not save config.toml: {e}"),
             };
-            (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(pages::error_page(&data)),
+            )
+                .into_response()
         }
     }
 }
@@ -517,7 +531,11 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
                 title: "Settings Error".to_string(),
                 message: format!("Failed to load config: {e}"),
             };
-            return (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(pages::error_page(&data)),
+            )
+                .into_response();
         }
     };
 
@@ -525,7 +543,10 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
         cfg.bot.command_scope = form.command_scope.clone();
     }
 
-    if matches!(form.online_status.as_str(), "online" | "dnd" | "idle" | "invisible") {
+    if matches!(
+        form.online_status.as_str(),
+        "online" | "dnd" | "idle" | "invisible"
+    ) {
         cfg.bot.online_status = form.online_status.clone();
     }
 
@@ -547,7 +568,11 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
                 title: "Settings Error".to_string(),
                 message: format!("Failed to save settings: {e}"),
             };
-            (StatusCode::INTERNAL_SERVER_ERROR, Html(pages::error_page(&data))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(pages::error_page(&data)),
+            )
+                .into_response()
         }
     }
 }
@@ -561,23 +586,32 @@ async fn config_backup() -> Response {
     // Perform all blocking filesystem and CPU-heavy ZIP work on a dedicated
     // thread so we don't stall the async runtime.
     let result = tokio::task::spawn_blocking(|| -> Result<Vec<u8>, String> {
-        let toml_bytes = std::fs::read("config.toml")
-            .map_err(|e| { tracing::error!("config_backup: failed to read config.toml: {e}"); "Could not read configuration file".to_string() })?;
+        let toml_bytes = std::fs::read("config.toml").map_err(|e| {
+            tracing::error!("config_backup: failed to read config.toml: {e}");
+            "Could not read configuration file".to_string()
+        })?;
 
         let mut zip_buf: Vec<u8> = Vec::new();
         let cursor = std::io::Cursor::new(&mut zip_buf);
         let mut zip = zip::ZipWriter::new(cursor);
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
-        zip.start_file("config.toml", options)
-            .map_err(|e| { tracing::error!("config_backup: failed to create ZIP entry: {e}"); "Could not create backup archive".to_string() })?;
+        zip.start_file("config.toml", options).map_err(|e| {
+            tracing::error!("config_backup: failed to create ZIP entry: {e}");
+            "Could not create backup archive".to_string()
+        })?;
         use std::io::Write;
-        zip.write_all(&toml_bytes)
-            .map_err(|e| { tracing::error!("config_backup: failed to write ZIP data: {e}"); "Could not write backup archive".to_string() })?;
-        zip.finish()
-            .map_err(|e| { tracing::error!("config_backup: failed to finalise ZIP: {e}"); "Could not finalise backup archive".to_string() })?;
+        zip.write_all(&toml_bytes).map_err(|e| {
+            tracing::error!("config_backup: failed to write ZIP data: {e}");
+            "Could not write backup archive".to_string()
+        })?;
+        zip.finish().map_err(|e| {
+            tracing::error!("config_backup: failed to finalise ZIP: {e}");
+            "Could not finalise backup archive".to_string()
+        })?;
         Ok(zip_buf)
-    }).await;
+    })
+    .await;
 
     match result {
         Ok(Ok(zip_buf)) => (
@@ -671,7 +705,10 @@ async fn config_restore(mut multipart: Multipart) -> Response {
         let cursor = std::io::Cursor::new(zip_bytes);
         let mut archive = zip::ZipArchive::new(cursor).map_err(|e| {
             tracing::warn!("config_restore: invalid ZIP file: {e}");
-            (StatusCode::BAD_REQUEST, "The uploaded file is not a valid ZIP archive".to_string())
+            (
+                StatusCode::BAD_REQUEST,
+                "The uploaded file is not a valid ZIP archive".to_string(),
+            )
         })?;
 
         // Find config.toml — case-insensitive, but reject any path that contains
@@ -693,14 +730,20 @@ async fn config_restore(mut multipart: Multipart) -> Response {
         });
 
         let entry_index = entry_index.ok_or_else(|| {
-            (StatusCode::BAD_REQUEST, "No config.toml found in the ZIP archive".to_string())
+            (
+                StatusCode::BAD_REQUEST,
+                "No config.toml found in the ZIP archive".to_string(),
+            )
         })?;
 
         let toml_content = {
             use std::io::Read;
             let entry = archive.by_index(entry_index).map_err(|e| {
                 tracing::error!("config_restore: failed to open ZIP entry: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Could not read the configuration entry from the archive".to_string(),
+                )
             })?;
 
             // Guard against zip bombs: reject entries whose declared
@@ -726,7 +769,10 @@ async fn config_restore(mut multipart: Multipart) -> Response {
                 .read_to_end(&mut buf)
                 .map_err(|e| {
                     tracing::error!("config_restore: failed to decompress config.toml: {e}");
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Could not read the configuration entry from the archive".to_string())
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Could not read the configuration entry from the archive".to_string(),
+                    )
                 })?;
             if bytes_read as u64 > MAX_CONFIG_UNCOMPRESSED_BYTES {
                 return Err((
@@ -742,7 +788,10 @@ async fn config_restore(mut multipart: Multipart) -> Response {
 
         // Validate UTF-8
         let toml_str = std::str::from_utf8(&toml_content).map_err(|_| {
-            (StatusCode::BAD_REQUEST, "The config.toml in the archive is not valid UTF-8".to_string())
+            (
+                StatusCode::BAD_REQUEST,
+                "The config.toml in the archive is not valid UTF-8".to_string(),
+            )
         })?;
 
         // Parse the TOML as the concrete Config type and run full semantic
@@ -750,14 +799,21 @@ async fn config_restore(mut multipart: Multipart) -> Response {
         // config (missing token, bad presence_type, etc.) is rejected before
         // being written to disk, preventing broken startups.
         let restored_cfg = toml::from_str::<crate::config::Config>(toml_str).map_err(|e| {
-            (StatusCode::BAD_REQUEST, format!("The config.toml in the archive is not valid TOML: {e}"))
+            (
+                StatusCode::BAD_REQUEST,
+                format!("The config.toml in the archive is not valid TOML: {e}"),
+            )
         })?;
         crate::config::validate(&restored_cfg).map_err(|e| {
-            (StatusCode::BAD_REQUEST, format!("The config.toml in the archive contains invalid settings: {e}"))
+            (
+                StatusCode::BAD_REQUEST,
+                format!("The config.toml in the archive contains invalid settings: {e}"),
+            )
         })?;
 
         Ok(toml_content)
-    }).await;
+    })
+    .await;
 
     match result {
         Ok(Ok(toml_content)) => {
@@ -816,9 +872,9 @@ pub fn public_router() -> Router<SharedState> {
         // that bot secrets are never exposed to unauthenticated visitors.
         .route("/setup", get(setup_page).post(setup_submit))
         // Dashboard quick-action controls (JSON responses)
-        .route("/control/restart",         post(control_restart))
-        .route("/control/stop",            post(control_stop))
-        .route("/control/clear-cache",     post(control_clear_cache))
+        .route("/control/restart", post(control_restart))
+        .route("/control/stop", post(control_stop))
+        .route("/control/clear-cache", post(control_clear_cache))
         .route("/control/reload-commands", post(control_reload_commands))
         // Public JSON API (health + stats do not expose secrets)
         .route("/health", get(health))
@@ -858,8 +914,7 @@ pub fn config_router() -> Router<SharedState> {
         // Apply a 5 MB body limit to prevent memory exhaustion from large uploads.
         .route(
             "/restore",
-            post(config_restore)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+            post(config_restore).layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
 }
 
@@ -877,7 +932,9 @@ pub fn admin_router() -> Router<SharedState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use std::sync::LazyLock;
+    use tokio::sync::Mutex as TokioMutex;
 
     use axum::{
         body::{self, Body},
@@ -890,7 +947,7 @@ mod tests {
     /// Global mutex serialising tests that mutate the process working directory.
     /// `std::env::set_current_dir` is not thread-safe across tests that run in
     /// parallel; holding this lock prevents races in filesystem-dependent tests.
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
+    static CWD_LOCK: LazyLock<TokioMutex<()>> = LazyLock::new(|| TokioMutex::new(()));
 
     fn test_state() -> state::SharedState {
         let cfg: config::Config = toml::from_str(
@@ -940,7 +997,12 @@ port = 8080
     #[tokio::test]
     async fn health_returns_200() {
         let resp = test_app()
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -949,7 +1011,12 @@ port = 8080
     #[tokio::test]
     async fn health_body_contains_ok_status() {
         let resp = test_app()
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         let text = body_string(resp.into_body()).await;
@@ -1070,10 +1137,7 @@ client_id = "123"
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FOUND);
-        assert_eq!(
-            resp.headers().get("location").unwrap(),
-            "/dashboard"
-        );
+        assert_eq!(resp.headers().get("location").unwrap(), "/dashboard");
     }
 
     #[tokio::test]
@@ -1110,7 +1174,12 @@ client_id = "123"
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert!(ct.contains("text/html"), "expected text/html, got {ct}");
     }
 
@@ -1229,7 +1298,12 @@ client_id = "123456"
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert!(ct.contains("text/css"), "expected text/css, got {ct}");
     }
 
@@ -1266,7 +1340,7 @@ client_id = "123456"
 
         // Serialise CWD mutation: hold the lock for the full duration of the
         // filesystem-sensitive section (CWD change + request + restore).
-        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let _cwd_guard = CWD_LOCK.lock().await;
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -1434,7 +1508,7 @@ client_id = "123456"
         )
         .unwrap();
 
-        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let _cwd_guard = CWD_LOCK.lock().await;
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -1452,7 +1526,12 @@ client_id = "123456"
         drop(_cwd_guard);
 
         assert_eq!(resp.status(), StatusCode::OK);
-        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert!(ct.contains("application/zip"), "expected zip, got {ct}");
         let cd = resp
             .headers()
@@ -1460,7 +1539,10 @@ client_id = "123456"
             .unwrap()
             .to_str()
             .unwrap();
-        assert!(cd.contains("config-backup.zip"), "unexpected disposition: {cd}");
+        assert!(
+            cd.contains("config-backup.zip"),
+            "unexpected disposition: {cd}"
+        );
     }
 
     #[tokio::test]
@@ -1468,7 +1550,7 @@ client_id = "123456"
         let temp_dir = tempfile::tempdir().unwrap();
         // Deliberately do NOT create config.toml
 
-        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let _cwd_guard = CWD_LOCK.lock().await;
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -1523,7 +1605,7 @@ client_id = "123456"
         multipart_body.extend_from_slice(&zip_buf);
         multipart_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
 
-        let _cwd_guard = CWD_LOCK.lock().unwrap();
+        let _cwd_guard = CWD_LOCK.lock().await;
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -1551,7 +1633,10 @@ client_id = "123456"
         assert_eq!(status, StatusCode::OK, "response body: {text}");
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v["success"], true, "response: {text}");
-        assert!(written.contains("restored"), "config not written: {written}");
+        assert!(
+            written.contains("restored"),
+            "config not written: {written}"
+        );
     }
 
     #[tokio::test]

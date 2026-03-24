@@ -22,7 +22,10 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
         &db,
         &author.id.to_string(),
         &author.name,
-        &author.discriminator.map(|d| d.to_string()).unwrap_or_default(),
+        &author
+            .discriminator
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
         author.avatar_url().as_deref(),
     )
     .await?;

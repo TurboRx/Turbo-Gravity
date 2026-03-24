@@ -25,9 +25,7 @@ pub async fn userinfo(
     let created_ts = user.id.created_at().unix_timestamp();
 
     let mut embed = serenity::CreateEmbed::new()
-        .author(
-            serenity::CreateEmbedAuthor::new(user.name.clone()).icon_url(user.face()),
-        )
+        .author(serenity::CreateEmbedAuthor::new(user.name.clone()).icon_url(user.face()))
         .thumbnail(user.face())
         .colour(colour)
         .field("User ID", user.id.to_string(), true)

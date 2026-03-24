@@ -7,9 +7,15 @@ fn format_duration(secs: u64) -> String {
     let minutes = (secs % 3600) / 60;
     let seconds = secs % 60;
     let mut parts = Vec::new();
-    if days > 0 { parts.push(format!("{days}d")); }
-    if hours > 0 { parts.push(format!("{hours}h")); }
-    if minutes > 0 { parts.push(format!("{minutes}m")); }
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if minutes > 0 {
+        parts.push(format!("{minutes}m"));
+    }
     parts.push(format!("{seconds}s"));
     parts.join(" ")
 }
