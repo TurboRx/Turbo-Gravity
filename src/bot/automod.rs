@@ -86,8 +86,8 @@ pub async fn handle_message(
     }
 
     // Check for spam (anti-spam)
-    if config.anti_spam_enabled {
-        if check_spam(
+    if config.anti_spam_enabled
+        && check_spam(
             &state,
             guild_id,
             message.author.id,
@@ -95,17 +95,16 @@ pub async fn handle_message(
             config.spam_interval_secs,
         )
         .await?
-        {
-            handle_violation(
-                ctx,
-                message,
-                &state,
-                "Spam detected",
-                "User exceeded message rate limit",
-            )
-            .await?;
-            return Ok(());
-        }
+    {
+        handle_violation(
+            ctx,
+            message,
+            &state,
+            "Spam detected",
+            "User exceeded message rate limit",
+        )
+        .await?;
+        return Ok(());
     }
 
     Ok(())
