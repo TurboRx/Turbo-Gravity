@@ -10,6 +10,8 @@ pub struct Config {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub dashboard: DashboardConfig,
+    #[serde(default)]
+    pub automod: AutoModConfig,
 }
 
 /// Bot configuration loaded from `[bot]` section of `config.toml`.
@@ -71,6 +73,59 @@ impl Default for DashboardConfig {
             admin_ids: Vec::new(),
         }
     }
+}
+
+/// Auto-moderation configuration loaded from `[automod]` section of `config.toml`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AutoModConfig {
+    #[serde(default = "default_automod_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub banned_words: Vec<String>,
+    #[serde(default = "default_invite_blocker_enabled")]
+    pub invite_blocker_enabled: bool,
+    #[serde(default = "default_anti_spam_enabled")]
+    pub anti_spam_enabled: bool,
+    #[serde(default = "default_spam_threshold")]
+    pub spam_threshold: u8,
+    #[serde(default = "default_spam_interval")]
+    pub spam_interval_secs: u64,
+}
+
+impl Default for AutoModConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            banned_words: Vec::new(),
+            invite_blocker_enabled: false,
+            anti_spam_enabled: false,
+            spam_threshold: DEFAULT_SPAM_THRESHOLD,
+            spam_interval_secs: DEFAULT_SPAM_INTERVAL_SECS,
+        }
+    }
+}
+
+pub const DEFAULT_SPAM_THRESHOLD: u8 = 5;
+pub const DEFAULT_SPAM_INTERVAL_SECS: u64 = 10;
+
+fn default_automod_enabled() -> bool {
+    false
+}
+
+fn default_invite_blocker_enabled() -> bool {
+    false
+}
+
+fn default_anti_spam_enabled() -> bool {
+    false
+}
+
+fn default_spam_threshold() -> u8 {
+    DEFAULT_SPAM_THRESHOLD
+}
+
+fn default_spam_interval() -> u64 {
+    DEFAULT_SPAM_INTERVAL_SECS
 }
 
 pub const DEFAULT_COMMAND_SCOPE: &str = "guild";
@@ -184,6 +239,20 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
         })?;
     }
 
+    // Validate auto-mod spam_threshold is at least 1
+    anyhow::ensure!(
+        cfg.automod.spam_threshold >= 1,
+        "config.automod.spam_threshold must be at least 1, got {}",
+        cfg.automod.spam_threshold
+    );
+
+    // Validate auto-mod spam_interval_secs is at least 1
+    anyhow::ensure!(
+        cfg.automod.spam_interval_secs >= 1,
+        "config.automod.spam_interval_secs must be at least 1, got {}",
+        cfg.automod.spam_interval_secs
+    );
+
     Ok(())
 }
 
@@ -238,6 +307,7 @@ pub fn load() -> anyhow::Result<Config> {
                 callback_url: DEFAULT_CALLBACK_URL.into(),
                 admin_ids,
             },
+            automod: AutoModConfig::default(),
         });
     }
     let raw = std::fs::read_to_string(path)

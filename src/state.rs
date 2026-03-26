@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
+use std::time::Instant;
 
 use mongodb::Client as MongoClient;
 use tokio::sync::{Mutex, Notify};
@@ -39,6 +40,8 @@ pub struct AppState {
     pub bot_online: AtomicBool,
     /// Number of guilds the bot is currently a member of (updated on READY).
     pub guild_count: AtomicUsize,
+    /// Anti-spam message tracking: (guild_id, user_id) → (message_count, window_start).
+    pub message_counts: Mutex<HashMap<(u64, u64), (u8, Instant)>>,
 }
 
 impl AppState {
@@ -51,6 +54,7 @@ impl AppState {
             oauth_states: Mutex::new(HashMap::new()),
             bot_online: AtomicBool::new(false),
             guild_count: AtomicUsize::new(0),
+            message_counts: Mutex::new(HashMap::new()),
         }
     }
 

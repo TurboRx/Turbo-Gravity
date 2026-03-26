@@ -433,6 +433,7 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             callback_url,
             admin_ids,
         },
+        automod: crate::config::AutoModConfig::default(),
     };
 
     match crate::config::save(&cfg) {

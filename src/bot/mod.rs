@@ -1,3 +1,4 @@
+pub mod automod;
 pub mod commands;
 
 use std::sync::atomic::Ordering;
@@ -49,7 +50,9 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
     // are privileged intents that require explicit enabling in the Discord
     // Developer Portal (Bot → Privileged Gateway Intents).
     // Enable them there and add them back here once toggled on.
-    let intents = serenity::GatewayIntents::non_privileged();
+    // We enable MESSAGE_CONTENT here since automod needs to read message content.
+    let intents = serenity::GatewayIntents::non_privileged()
+        | serenity::GatewayIntents::MESSAGE_CONTENT;
 
     let commands = commands::all();
 
@@ -76,7 +79,7 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
             },
             // Track Resume events so the dashboard reflects the real online status
             // after a transparent gateway reconnect (no new READY is fired).
-            event_handler: |_ctx, event, _framework_ctx, data| {
+            event_handler: |ctx, event, _framework_ctx, data| {
                 Box::pin(async move {
                     match event {
                         serenity::FullEvent::Resume { .. } => {
@@ -102,6 +105,19 @@ async fn run_client(state: SharedState) -> anyhow::Result<()> {
                                     Ordering::Relaxed,
                                     |v| v.checked_sub(1),
                                 );
+                            }
+                        }
+                        // Handle new messages for auto-moderation
+                        serenity::FullEvent::Message { new_message } => {
+                            let state = crate::state::SharedState::from(data.clone());
+                            if let Err(e) = crate::bot::automod::handle_message(
+                                ctx,
+                                new_message,
+                                state,
+                            )
+                            .await
+                            {
+                                tracing::error!("Auto-mod error: {}", e);
                             }
                         }
                         _ => {}
