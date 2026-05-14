@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic, clippy::nursery, clippy::cargo)]
 mod bot;
 mod config;
 mod dashboard;
