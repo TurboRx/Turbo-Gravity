@@ -34,6 +34,6 @@ pub async fn ball8(
         .choose(&mut rand::rng())
         .copied()
         .unwrap_or("Maybe.");
-    ctx.say(format!("🎱 **{}**\n{}", question, answer)).await?;
+    ctx.say(format!("🎱 **{question}**\n{answer}")).await?;
     Ok(())
 }

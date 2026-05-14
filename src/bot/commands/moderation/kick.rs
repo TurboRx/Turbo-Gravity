@@ -40,12 +40,10 @@ pub async fn kick(
     if let Some(invoker) = invoker {
         let invoker_top = invoker
             .roles(ctx)
-            .map(|roles| roles.iter().map(|r| r.position).max().unwrap_or(0))
-            .unwrap_or(0);
+            .map_or(0, |roles| roles.iter().map(|r| r.position).max().unwrap_or(0));
         let target_top = member
             .roles(ctx)
-            .map(|roles| roles.iter().map(|r| r.position).max().unwrap_or(0))
-            .unwrap_or(0);
+            .map_or(0, |roles| roles.iter().map(|r| r.position).max().unwrap_or(0));
         if invoker_top <= target_top {
             ctx.say("You cannot kick someone with an equal or higher role.")
                 .await?;

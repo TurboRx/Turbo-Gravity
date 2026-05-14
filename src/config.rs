@@ -42,7 +42,7 @@ pub struct DatabaseConfig {
     pub mongo_uri: String,
 }
 
-/// Dashboard / OAuth2 configuration loaded from `[dashboard]` section.
+/// Dashboard / `OAuth2` configuration loaded from `[dashboard]` section.
 // Fields like session_secret, client_secret, callback_url, and admin_ids
 // are intentionally included for future Discord OAuth2 login support.
 #[allow(dead_code)]
@@ -108,23 +108,23 @@ impl Default for AutoModConfig {
 pub const DEFAULT_SPAM_THRESHOLD: u8 = 5;
 pub const DEFAULT_SPAM_INTERVAL_SECS: u64 = 10;
 
-fn default_automod_enabled() -> bool {
+const fn default_automod_enabled() -> bool {
     false
 }
 
-fn default_invite_blocker_enabled() -> bool {
+const fn default_invite_blocker_enabled() -> bool {
     false
 }
 
-fn default_anti_spam_enabled() -> bool {
+const fn default_anti_spam_enabled() -> bool {
     false
 }
 
-fn default_spam_threshold() -> u8 {
+const fn default_spam_threshold() -> u8 {
     DEFAULT_SPAM_THRESHOLD
 }
 
-fn default_spam_interval() -> u64 {
+const fn default_spam_interval() -> u64 {
     DEFAULT_SPAM_INTERVAL_SECS
 }
 
@@ -146,11 +146,11 @@ fn default_online_status() -> String {
     DEFAULT_ONLINE_STATUS.into()
 }
 
-fn default_enable_dashboard() -> bool {
+const fn default_enable_dashboard() -> bool {
     false
 }
 
-fn default_port() -> u16 {
+const fn default_port() -> u16 {
     DEFAULT_PORT
 }
 
@@ -233,8 +233,7 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
     for admin_id in &cfg.dashboard.admin_ids {
         admin_id.parse::<u64>().with_context(|| {
             format!(
-                "config.dashboard.admin_ids entry '{}' must be a valid Discord snowflake (numeric)",
-                admin_id
+                "config.dashboard.admin_ids entry '{admin_id}' must be a valid Discord snowflake (numeric)"
             )
         })?;
     }
@@ -258,7 +257,7 @@ pub fn validate(cfg: &Config) -> anyhow::Result<()> {
 
 /// Returns `true` when the configuration is not yet sufficient to run the bot
 /// (first-run / setup mode). Currently this requires both a non-empty token and
-/// a non-empty, numeric client_id.
+/// a non-empty, numeric `client_id`.
 /// Use this after `load()` to decide whether to start the setup wizard instead of the bot.
 pub fn needs_setup(cfg: &Config) -> bool {
     let token_empty = cfg.bot.token.trim().is_empty();
@@ -544,7 +543,7 @@ client_id = "123"
     fn validate_accepts_all_valid_online_statuses() {
         let mut cfg: Config = toml::from_str(minimal_toml()).unwrap();
         for status in &["online", "dnd", "idle", "invisible"] {
-            cfg.bot.online_status = status.to_string();
+            cfg.bot.online_status = (*status).to_string();
             assert!(validate(&cfg).is_ok(), "expected ok for status={status}");
         }
     }

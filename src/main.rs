@@ -120,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
                 tracing::error!("Bot exited with error: {e}");
             }
         }
-        _ = shutdown_signal() => {
+        () = shutdown_signal() => {
             info!("Shutdown signal received, exiting gracefully");
         }
     }
@@ -150,7 +150,7 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        () = ctrl_c => {},
+        () = terminate => {},
     }
 }

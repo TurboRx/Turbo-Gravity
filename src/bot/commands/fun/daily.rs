@@ -33,8 +33,7 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
     let now_ms = chrono::Utc::now().timestamp_millis();
     let last_ms = profile
         .last_daily
-        .map(|d| d.timestamp_millis())
-        .unwrap_or(0);
+        .map_or(0, mongodb::bson::DateTime::timestamp_millis);
     let elapsed_secs = (now_ms - last_ms) / 1000;
 
     if elapsed_secs < DAILY_COOLDOWN_SECS {

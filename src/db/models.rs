@@ -31,31 +31,31 @@ pub struct User {
     pub last_work: Option<BsonDateTime>,
 }
 
-fn default_level() -> i64 {
+const fn default_level() -> i64 {
     1
 }
 
 impl User {
-    pub fn collection(db: &Database) -> Collection<User> {
+    pub fn collection(db: &Database) -> Collection<Self> {
         db.collection("users")
     }
 
     pub async fn find_by_discord_id(
         db: &Database,
         discord_id: &str,
-    ) -> anyhow::Result<Option<User>> {
+    ) -> anyhow::Result<Option<Self>> {
         let col = Self::collection(db);
         Ok(col.find_one(doc! { "discord_id": discord_id }).await?)
     }
 
-    /// Find the user or create a minimal document for them using MongoDB's atomic upsert.
+    /// Find the user or create a minimal document for them using `MongoDB`'s atomic upsert.
     pub async fn upsert(
         db: &Database,
         discord_id: &str,
         username: &str,
         discriminator: &str,
         avatar: Option<&str>,
-    ) -> anyhow::Result<User> {
+    ) -> anyhow::Result<Self> {
         use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 
         let col = Self::collection(db);
@@ -113,7 +113,7 @@ pub struct Warning {
 }
 
 impl Warning {
-    pub fn collection(db: &Database) -> Collection<Warning> {
+    pub fn collection(db: &Database) -> Collection<Self> {
         db.collection("warnings")
     }
 
@@ -125,7 +125,7 @@ impl Warning {
         reason: &str,
     ) -> anyhow::Result<()> {
         let col = Self::collection(db);
-        let warning = Warning {
+        let warning = Self {
             id: None,
             guild_id: guild_id.to_string(),
             user_id: user_id.to_string(),
@@ -150,7 +150,7 @@ impl Warning {
         user_id: &str,
         skip: u64,
         limit: i64,
-    ) -> anyhow::Result<Vec<Warning>> {
+    ) -> anyhow::Result<Vec<Self>> {
         use mongodb::options::FindOptions;
         let col = Self::collection(db);
         let opts = FindOptions::builder()
@@ -174,19 +174,16 @@ impl Warning {
 // Helper: convert BsonDateTime to chrono::DateTime<Utc>
 // ---------------------------------------------------------------------------
 
-/// Helper: convert BsonDateTime → chrono::DateTime<Utc>.
+/// Helper: convert `BsonDateTime` → `chrono::DateTime`<Utc>.
 /// Logs a warning and returns the Unix epoch if the timestamp is out of range.
 pub fn bson_dt_to_chrono(dt: BsonDateTime) -> DateTime<Utc> {
-    match DateTime::from_timestamp_millis(dt.timestamp_millis()) {
-        Some(ts) => ts,
-        None => {
-            tracing::warn!(
-                "bson_dt_to_chrono: timestamp {} ms is out of chrono range, \
-                 falling back to Unix epoch",
-                dt.timestamp_millis()
-            );
-            DateTime::default()
-        }
+    if let Some(ts) = DateTime::from_timestamp_millis(dt.timestamp_millis()) { ts } else {
+        tracing::warn!(
+            "bson_dt_to_chrono: timestamp {} ms is out of chrono range, \
+             falling back to Unix epoch",
+            dt.timestamp_millis()
+        );
+        DateTime::default()
     }
 }
 

@@ -34,8 +34,7 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
         .map(|g| {
             cache
                 .guild(*g)
-                .map(|g| g.member_count as usize)
-                .unwrap_or(0)
+                .map_or(0, |g| g.member_count as usize)
         })
         .sum();
 

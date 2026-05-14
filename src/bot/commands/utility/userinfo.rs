@@ -47,8 +47,7 @@ pub async fn userinfo(
                     .iter()
                     .filter(|r| {
                         ctx.guild_id()
-                            .map(|gid| r.id != gid.everyone_role())
-                            .unwrap_or(true)
+                            .is_none_or(|gid| r.id != gid.everyone_role())
                     })
                     .map(|r| format!("<@&{}>", r.id))
                     .collect()

@@ -28,7 +28,7 @@ pub async fn warnings(
         return Ok(());
     };
 
-    let page = page.unwrap_or(1).saturating_sub(1) as u64;
+    let page = u64::from(page.unwrap_or(1).saturating_sub(1));
     let total = Warning::count(&db, &guild_id, &user.id.to_string()).await?;
 
     if total == 0 {
@@ -53,7 +53,7 @@ pub async fn warnings(
         .thumbnail(user.face())
         .footer(serenity::CreateEmbedFooter::new(format!(
             "Total: {total} warning{} | Page {} of {total_pages}",
-            if total != 1 { "s" } else { "" },
+            if total == 1 { "" } else { "s" },
             page + 1
         )));
 

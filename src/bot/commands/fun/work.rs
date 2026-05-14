@@ -43,7 +43,7 @@ pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
     .await?;
 
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let last_ms = profile.last_work.map(|d| d.timestamp_millis()).unwrap_or(0);
+    let last_ms = profile.last_work.map_or(0, mongodb::bson::DateTime::timestamp_millis);
     let elapsed_secs = (now_ms - last_ms) / 1000;
 
     if elapsed_secs < WORK_COOLDOWN_SECS {

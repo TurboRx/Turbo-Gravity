@@ -26,12 +26,12 @@ pub struct AppState {
     /// The main entry point listens for this signal to stop the setup-mode
     /// dashboard and automatically start the bot without any manual intervention.
     pub setup_complete: Notify,
-    /// Active dashboard sessions: session_id → SessionInfo (user_id + username).
+    /// Active dashboard sessions: `session_id` → `SessionInfo` (`user_id` + username).
     pub sessions: Mutex<HashMap<String, SessionInfo>>,
-    /// Pending OAuth2 CSRF states awaiting callback validation.
+    /// Pending `OAuth2` CSRF states awaiting callback validation.
     /// The value is the redirect URI used when initiating the login, so the
     /// callback handler can reuse the exact same URI for the token exchange
-    /// (required by Discord's OAuth2 flow when the redirect URI is dynamic,
+    /// (required by Discord's `OAuth2` flow when the redirect URI is dynamic,
     /// e.g. auto-detected from the Host header on cloud deployments).
     pub oauth_states: Mutex<HashMap<String, String>>,
     /// Whether the Discord gateway connection is currently live.
@@ -40,7 +40,7 @@ pub struct AppState {
     pub bot_online: AtomicBool,
     /// Number of guilds the bot is currently a member of (updated on READY).
     pub guild_count: AtomicUsize,
-    /// Anti-spam message tracking: (guild_id, user_id) → (message_count, window_start).
+    /// Anti-spam message tracking: (`guild_id`, `user_id`) → (`message_count`, `window_start`).
     pub message_counts: Mutex<HashMap<(u64, u64), (u8, Instant)>>,
 }
 
@@ -58,7 +58,7 @@ impl AppState {
         }
     }
 
-    /// Returns a reference to the MongoDB database, or `None` if no DB is configured.
+    /// Returns a reference to the `MongoDB` database, or `None` if no DB is configured.
     pub fn database(&self) -> Option<mongodb::Database> {
         self.db.as_ref().map(|c| c.database("turbo_gravity"))
     }

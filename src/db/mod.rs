@@ -3,7 +3,7 @@ pub mod models;
 use anyhow::Context;
 use mongodb::{options::ClientOptions, Client};
 
-/// Connect to MongoDB using the provided URI and return a client.
+/// Connect to `MongoDB` using the provided URI and return a client.
 pub async fn connect(uri: &str) -> anyhow::Result<Client> {
     let options = ClientOptions::parse(uri)
         .await

@@ -1,14 +1,14 @@
-/// Discord OAuth2 authentication for the dashboard.
+/// Discord `OAuth2` authentication for the dashboard.
 ///
 /// Routes:
 ///   GET  /auth/login    – redirect the browser to Discord's authorization page.
 ///   GET  /auth/callback – exchange the authorization code for an access token,
 ///                         fetch the Discord profile, validate the admin ID, and
-///                         issue an HttpOnly session cookie.
+///                         issue an `HttpOnly` session cookie.
 ///
 /// Middleware:
 ///   `require_admin` – verifies a valid session cookie and checks that the
-///                     session belongs to the configured ADMIN_DISCORD_ID.
+///                     session belongs to the configured `ADMIN_DISCORD_ID`.
 use axum::{
     extract::{Query, State},
     http::{header, StatusCode},
@@ -40,7 +40,7 @@ type DiscordOauthClient = BasicClient<
     EndpointSet,    // HasTokenUrl
 >;
 
-/// Build a Discord OAuth2 [`BasicClient`] using the supplied `redirect_uri`.
+/// Build a Discord `OAuth2` [`BasicClient`] using the supplied `redirect_uri`.
 ///
 /// The `client_id` and `client_secret` are read from env vars first
 /// (`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`), falling back to the values
@@ -77,7 +77,7 @@ fn build_oauth_client(
     Ok(client)
 }
 
-/// Determine the OAuth2 redirect URI for the current request.
+/// Determine the `OAuth2` redirect URI for the current request.
 ///
 /// Resolution order (first non-empty value wins):
 /// 1. `DISCORD_REDIRECT_URI` environment variable – explicit override, highest priority.
@@ -112,13 +112,13 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
                     let host = headers
                         .get("x-forwarded-host")
                         .and_then(|v| v.to_str().ok())
-                        .map(|s| s.trim())
+                        .map(str::trim)
                         .filter(|s| !s.is_empty())
                         .or_else(|| {
                             headers
                                 .get("host")
                                 .and_then(|v| v.to_str().ok())
-                                .map(|s| s.trim())
+                                .map(str::trim)
                                 .filter(|s| !s.is_empty())
                         });
 
@@ -142,7 +142,7 @@ fn detect_redirect_uri(state: &crate::state::AppState, headers: &axum::http::Hea
 /// browser to it.  A CSRF state token is stored in server memory so that the
 /// callback handler can verify it.
 ///
-/// The OAuth2 redirect URI is resolved dynamically from request headers so that
+/// The `OAuth2` redirect URI is resolved dynamically from request headers so that
 /// the dashboard works correctly on cloud deployments without
 /// requiring manual configuration of `DISCORD_REDIRECT_URI`.
 pub async fn login(State(state): State<SharedState>, headers: axum::http::HeaderMap) -> Response {
@@ -220,16 +220,13 @@ pub async fn callback(
         states.remove(&params.state)
     };
 
-    let redirect_uri = match redirect_uri {
-        Some(uri) => uri,
-        None => {
-            tracing::warn!("OAuth2 callback received invalid or expired CSRF state");
-            return (
-                StatusCode::BAD_REQUEST,
-                "Invalid or expired CSRF state. Please try logging in again.",
-            )
-                .into_response();
-        }
+    let redirect_uri = if let Some(uri) = redirect_uri { uri } else {
+        tracing::warn!("OAuth2 callback received invalid or expired CSRF state");
+        return (
+            StatusCode::BAD_REQUEST,
+            "Invalid or expired CSRF state. Please try logging in again.",
+        )
+            .into_response();
     };
 
     // --- 2. Build OAuth2 client --------------------------------------------

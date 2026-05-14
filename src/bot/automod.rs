@@ -123,7 +123,7 @@ async fn check_spam(
     let now = std::time::Instant::now();
     let interval = Duration::from_secs(interval_secs);
 
-    let (is_spam, new_count) = if let Some((count, start)) = message_counts.get(&key).cloned() {
+    let (is_spam, new_count) = if let Some((count, start)) = message_counts.get(&key).copied() {
         let elapsed = now.duration_since(start);
         if elapsed > interval {
             // Reset the window
@@ -175,7 +175,7 @@ async fn handle_violation(
         violation_type,
         reason,
         message.author.id,
-        message.guild_id.map(|g| g.get()).unwrap_or(0)
+        message.guild_id.map_or(0, poise::serenity_prelude::GuildId::get)
     );
 
     Ok(())

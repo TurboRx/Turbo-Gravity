@@ -121,19 +121,17 @@ async fn dashboard_page(State(state): State<SharedState>, headers: HeaderMap) ->
     };
     let guild_count = state.guild_count.load(std::sync::atomic::Ordering::Relaxed);
     let permissions = "8".to_string();
-    let invite_link = if !state.config.bot.client_id.is_empty() {
+    let invite_link = if state.config.bot.client_id.is_empty() {
+        "#".to_string()
+    } else {
         format!(
             "https://discord.com/api/oauth2/authorize?client_id={}&permissions={}&scope=bot%20applications.commands",
             state.config.bot.client_id, permissions,
         )
-    } else {
-        "#".to_string()
     };
     // Extract the logged-in username from the session cookie (best-effort).
     let username = super::auth::current_session(&state, &headers)
-        .await
-        .map(|s| s.username)
-        .unwrap_or_else(|| "Admin".to_string());
+        .await.map_or_else(|| "Admin".to_string(), |s| s.username);
     let data = DashboardData {
         bot_status,
         command_scope: state.config.bot.command_scope.clone(),
@@ -193,9 +191,7 @@ async fn selector_page(State(state): State<SharedState>, headers: HeaderMap) -> 
         "offline"
     };
     let username = super::auth::current_session(&state, &headers)
-        .await
-        .map(|s| s.username)
-        .unwrap_or_else(|| "Admin".to_string());
+        .await.map_or_else(|| "Admin".to_string(), |s| s.username);
     let guild_count = state.guild_count.load(std::sync::atomic::Ordering::Relaxed);
     let data = SelectorData {
         username,
@@ -209,9 +205,7 @@ async fn selector_page(State(state): State<SharedState>, headers: HeaderMap) -> 
 /// GET /settings — user profile & logout page
 async fn settings_page(State(state): State<SharedState>, headers: HeaderMap) -> Html<String> {
     let session = super::auth::current_session(&state, &headers).await;
-    let (username, user_id) = session
-        .map(|s| (s.username, s.user_id))
-        .unwrap_or_else(|| ("Admin".to_string(), String::new()));
+    let (username, user_id) = session.map_or_else(|| ("Admin".to_string(), String::new()), |s| (s.username, s.user_id));
     let data = SettingsData { username, user_id };
     Html(pages::settings_page(&data))
 }
@@ -327,8 +321,7 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
                 code: 400,
                 title: "Invalid Admin ID".to_string(),
                 message: format!(
-                    "Admin ID '{}' must be a valid Discord snowflake (numeric)",
-                    admin_id
+                    "Admin ID '{admin_id}' must be a valid Discord snowflake (numeric)"
                 ),
             };
             return (StatusCode::BAD_REQUEST, Html(pages::error_page(&data))).into_response();
@@ -429,7 +422,7 @@ async fn setup_submit(State(state): State<SharedState>, Form(form): Form<SetupFo
             enable_dashboard: true,
             port,
             session_secret: form.session_secret.clone(),
-            client_secret: form.client_secret.clone(),
+            client_secret: form.client_secret,
             callback_url,
             admin_ids,
         },
@@ -558,7 +551,7 @@ async fn dashboard_settings(Form(form): Form<DashboardSettingsForm>) -> Response
     }
 
     if !form.presence_text.is_empty() {
-        cfg.bot.presence_text = form.presence_text.clone();
+        cfg.bot.presence_text = form.presence_text;
     }
 
     match crate::config::save(&cfg) {
@@ -779,8 +772,7 @@ async fn config_restore(mut multipart: Multipart) -> Response {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     format!(
-                        "config.toml exceeds the maximum allowed size of {} bytes",
-                        MAX_CONFIG_UNCOMPRESSED_BYTES
+                        "config.toml exceeds the maximum allowed size of {MAX_CONFIG_UNCOMPRESSED_BYTES} bytes"
                     ),
                 ));
             }

@@ -16,7 +16,7 @@ use crate::state::SharedState;
 /// The server always binds to `0.0.0.0:{port}` (required for container
 /// environments and deployments behind reverse proxies).  The `/api/config/*`
 /// routes and `/dashboard/settings` are protected by the `require_admin`
-/// middleware which enforces a valid Discord OAuth2 session belonging to
+/// middleware which enforces a valid Discord `OAuth2` session belonging to
 /// `ADMIN_DISCORD_ID`.
 pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let port = state.config.dashboard.port;

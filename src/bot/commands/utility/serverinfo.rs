@@ -55,9 +55,7 @@ pub async fn serverinfo(ctx: Context<'_>) -> Result<(), Error> {
         .field(
             "Owner",
             owner
-                .as_ref()
-                .map(|u| u.name.clone())
-                .unwrap_or_else(|| "Unknown".into()),
+                .as_ref().map_or_else(|| "Unknown".into(), |u| u.name.clone()),
             true,
         )
         .field("Members", member_count.to_string(), true)

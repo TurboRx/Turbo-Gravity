@@ -641,7 +641,7 @@ label.toggle input:checked + .toggle-track .toggle-thumb {
 // Theme-toggle JS – raw string keeps JS braces away from format! escaping
 // ---------------------------------------------------------------------------
 
-const THEME_SCRIPT: &str = r#"<script>
+const THEME_SCRIPT: &str = r"<script>
 (function() {
   const t = localStorage.getItem('theme');
   const h = document.documentElement;
@@ -672,7 +672,7 @@ function toggleSidebar() {
   if (overlay)   { overlay.classList.toggle('open', isOpen); }
   if (hamburger) { hamburger.classList.toggle('open', isOpen); }
 }
-</script>"#;
+</script>";
 
 // ---------------------------------------------------------------------------
 // Dashboard JS – fetch-based control actions, toasts, stats popovers, InfoTips
@@ -944,13 +944,10 @@ fn build_topbar(page_name: &str, username: &str) -> String {
   </div>
 </header>
 "#,
-        page_name = page_name,
-        username_e = username_e,
-        initials = initials,
     )
 }
 
-fn html_foot() -> &'static str {
+const fn html_foot() -> &'static str {
     "</body>\n</html>\n"
 }
 
@@ -991,10 +988,10 @@ pub fn dashboard_page(data: &DashboardData) -> String {
     let guild_id = html_escape(&data.guild_id);
     let presence_text = html_escape(&data.presence_text);
 
-    let scope_guild_sel = if data.command_scope != "global" {
-        " selected"
-    } else {
+    let scope_guild_sel = if data.command_scope == "global" {
         ""
+    } else {
+        " selected"
     };
     let scope_global_sel = if data.command_scope == "global" {
         " selected"
@@ -1052,7 +1049,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
     let guild_count_str = data.guild_count.to_string();
 
     format!(
-        r##"{head}
+        r#"{head}
 <div class="layout">
 {sidebar}
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -1348,7 +1345,7 @@ pub fn dashboard_page(data: &DashboardData) -> String {
 </div><!-- /main-wrapper -->
 </div><!-- /layout -->
 <div id="toast-container" class="toast-container"></div>
-{foot}"##
+{foot}"#
     )
 }
 
@@ -1377,10 +1374,10 @@ pub fn setup_page(data: &SetupData) -> String {
     let head = html_head("Setup", DASHBOARD_SCRIPT);
     let foot = html_foot();
 
-    let scope_guild_sel = if data.command_scope != "global" {
-        " selected"
-    } else {
+    let scope_guild_sel = if data.command_scope == "global" {
         ""
+    } else {
+        " selected"
     };
     let scope_global_sel = if data.command_scope == "global" {
         " selected"
@@ -1710,15 +1707,12 @@ pub fn selector_page(data: &SelectorData) -> String {
         .map(|g| {
             let name  = html_escape(&g.name);
             let gid   = html_escape(&g.id);
-            let icon_html = match &g.icon {
-                Some(hash) => format!(
-                    r#"<img src="https://cdn.discordapp.com/icons/{gid}/{hash}.webp?size=128" alt="{name}" />"#,
-                    hash = html_escape(hash)
-                ),
-                None => {
-                    let initial: String = g.name.chars().next().unwrap_or('?').to_uppercase().collect();
-                    format!(r#"<span style="font-size:24px;font-weight:700">{initial}</span>"#)
-                }
+            let icon_html = if let Some(hash) = &g.icon { format!(
+                r#"<img src="https://cdn.discordapp.com/icons/{gid}/{hash}.webp?size=128" alt="{name}" />"#,
+                hash = html_escape(hash)
+            ) } else {
+                let initial: String = g.name.chars().next().unwrap_or('?').to_uppercase().collect();
+                format!(r#"<span style="font-size:24px;font-weight:700">{initial}</span>"#)
             };
             let members_html = match g.member_count {
                 Some(n) => format!(r#"<span class="guild-members">{n} members</span>"#),
@@ -1780,7 +1774,7 @@ pub fn selector_page(data: &SelectorData) -> String {
 /// The bot starts automatically — no manual restart is required.
 pub fn setup_complete_page(dashboard_port: u16) -> String {
     let poll_script = format!(
-        r#"<script>
+        r"<script>
 (function() {{
   var port = {dashboard_port};
   var proto = window.location.protocol;
@@ -1820,8 +1814,7 @@ pub fn setup_complete_page(dashboard_port: u16) -> String {
     setTimeout(poll, 3000);
   }});
 }})();
-</script>"#,
-        dashboard_port = dashboard_port
+</script>"
     );
 
     let head = html_head("Setup Complete", &poll_script);
@@ -1954,9 +1947,6 @@ pub fn settings_page(data: &SettingsData) -> String {
 </div>
 </div>
 {foot}"#,
-        initials = initials,
-        username = username,
-        user_id = user_id,
     )
 }
 

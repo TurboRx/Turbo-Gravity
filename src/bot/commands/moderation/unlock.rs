@@ -36,8 +36,7 @@ pub async fn unlock(
         .permission_overwrites
         .iter()
         .find(|o| o.kind == serenity::PermissionOverwriteType::Role(everyone_id))
-        .map(|o| o.deny.contains(serenity::Permissions::SEND_MESSAGES))
-        .unwrap_or(false);
+        .is_some_and(|o| o.deny.contains(serenity::Permissions::SEND_MESSAGES));
 
     if !is_locked {
         ctx.say("Channel is already unlocked.").await?;

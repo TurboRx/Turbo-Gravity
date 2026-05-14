@@ -29,12 +29,9 @@ pub async fn unban(
     // Check the ban exists (bans takes http, pagination option, limit option)
     let bans = guild_id.bans(ctx, None, None).await?;
     let ban = bans.iter().find(|b| b.user.id == uid);
-    let ban = match ban {
-        Some(b) => b.clone(),
-        None => {
-            ctx.say("That user is not banned.").await?;
-            return Ok(());
-        }
+    let ban = if let Some(b) = ban { b.clone() } else {
+        ctx.say("That user is not banned.").await?;
+        return Ok(());
     };
 
     guild_id

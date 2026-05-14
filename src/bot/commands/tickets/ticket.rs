@@ -197,12 +197,11 @@ pub async fn close(
     let invoker = ctx.author_member().await;
     let is_mod = invoker
         .as_ref()
-        .map(|m| {
+        .is_some_and(|m| {
             m.permissions(ctx)
                 .map(|p| p.contains(serenity::Permissions::MANAGE_CHANNELS))
                 .unwrap_or(false)
-        })
-        .unwrap_or(false);
+        });
 
     if !is_owner && !is_mod {
         ctx.say("You cannot close this ticket.").await?;
@@ -268,12 +267,11 @@ pub async fn add(
     let invoker = ctx.author_member().await;
     let is_mod = invoker
         .as_ref()
-        .map(|m| {
+        .is_some_and(|m| {
             m.permissions(ctx)
                 .map(|p| p.contains(serenity::Permissions::MANAGE_CHANNELS))
                 .unwrap_or(false)
-        })
-        .unwrap_or(false);
+        });
 
     if !is_owner && !is_mod {
         ctx.say("You cannot modify this ticket.").await?;
@@ -331,12 +329,11 @@ pub async fn remove(
     let invoker = ctx.author_member().await;
     let is_mod = invoker
         .as_ref()
-        .map(|m| {
+        .is_some_and(|m| {
             m.permissions(ctx)
                 .map(|p| p.contains(serenity::Permissions::MANAGE_CHANNELS))
                 .unwrap_or(false)
-        })
-        .unwrap_or(false);
+        });
 
     if !is_owner && !is_mod {
         ctx.say("You cannot modify this ticket.").await?;
