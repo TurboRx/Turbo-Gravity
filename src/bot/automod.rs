@@ -6,7 +6,11 @@ use tokio::time::timeout;
 use crate::db::models::Warning;
 use crate::state::SharedState;
 
-const INVITE_PATTERNS: &[&str] = &["discord.gg/", "discord.com/invite/"];
+const INVITE_PATTERNS: &[&str] = &[
+    "discord.gg/",
+    "discord.com/invite/",
+    "discordapp.com/invite/", // legacy URL still valid
+];
 
 /// Handle a new message for auto-moderation.
 /// Checks for banned words, invite links, and spam.
@@ -123,25 +127,33 @@ async fn check_spam(
     let now = std::time::Instant::now();
     let interval = Duration::from_secs(interval_secs);
 
-    let (is_spam, new_count) = if let Some((count, start)) = message_counts.get(&key).copied() {
-        let elapsed = now.duration_since(start);
-        if elapsed > interval {
-            // Reset the window
-            (false, 1)
-        } else if count >= threshold {
-            // User has exceeded the threshold within the interval
-            // Reset for next time
-            (true, 1)
-        } else {
-            // Increment count
-            (false, count + 1)
-        }
-    } else {
-        // First message in window
-        (false, 1)
-    };
+    // Opportunistically evict entries whose window has expired.
+    // This keeps the map bounded to currently-active users and prevents
+    // unbounded memory growth on busy bots (BUG-04).
+    message_counts.retain(|_, (_, start)| now.duration_since(*start) <= interval);
 
-    message_counts.insert(key, (new_count, now));
+    let (is_spam, new_count, new_start) =
+        if let Some((count, start)) = message_counts.get(&key).copied() {
+            let elapsed = now.duration_since(start);
+            if elapsed > interval {
+                // Window expired — start fresh; not spam
+                (false, 1_u8, now)
+            } else if count >= threshold {
+                // Still inside the window and already over the threshold — spam!
+                // Keep the same window start so the user stays blocked until the
+                // interval expires naturally.  Reset count to 0 so the next
+                // incoming message (which will also be caught) increments cleanly.
+                (true, 0_u8, start)
+            } else {
+                // Increment count within the existing window
+                (false, count + 1, start)
+            }
+        } else {
+            // First message we've seen from this user in this guild
+            (false, 1_u8, now)
+        };
+
+    message_counts.insert(key, (new_count, new_start));
     Ok(is_spam)
 }
 
@@ -153,10 +165,12 @@ async fn handle_violation(
     violation_type: &str,
     reason: &str,
 ) -> anyhow::Result<()> {
-    // Delete the message
+    // Delete the message with a 5-second timeout; log but don't abort on failure.
     let delete_result = timeout(Duration::from_secs(5), message.delete(ctx)).await;
-    if delete_result.is_err() {
-        tracing::warn!("Failed to delete automod message");
+    match delete_result {
+        Err(_) => tracing::warn!("Timed out deleting automod message"),
+        Ok(Err(e)) => tracing::warn!("Failed to delete automod message: {e}"),
+        Ok(Ok(())) => {}
     }
 
     // Log warning to database if available

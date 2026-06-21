@@ -44,7 +44,8 @@ pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
 
     let now_ms = chrono::Utc::now().timestamp_millis();
     let last_ms = profile.last_work.map_or(0, mongodb::bson::DateTime::timestamp_millis);
-    let elapsed_secs = (now_ms - last_ms) / 1000;
+    // Clamp to 0 to guard against clock skew or future timestamps in the DB.
+    let elapsed_secs = ((now_ms - last_ms) / 1000).max(0);
 
     if elapsed_secs < WORK_COOLDOWN_SECS {
         let remaining = WORK_COOLDOWN_SECS - elapsed_secs;
@@ -66,6 +67,11 @@ pub async fn work(ctx: Context<'_>) -> Result<(), Error> {
     profile.balance += earned;
     profile.xp += XP_GAINED;
     profile.last_work = Some(BsonDateTime::now());
+
+    // Guard against a corrupted level value
+    if profile.level < 1 {
+        profile.level = 1;
+    }
 
     // Level-up loop: consume XP before incrementing level to prevent infinite leveling
     while profile.xp >= profile.level * 100 {

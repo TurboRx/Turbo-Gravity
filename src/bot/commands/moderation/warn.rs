@@ -32,18 +32,28 @@ pub async fn warn(
     };
 
     let warn_count = if let Some(db) = ctx.data().database() {
-        Warning::create(
+        // Propagate creation error as a log warning but don't abort the command
+        let created = Warning::create(
             &db,
             &guild_id,
             &member.user.id.to_string(),
             &ctx.author().id.to_string(),
             &reason,
         )
-        .await
-        .ok();
-        Warning::count(&db, &guild_id, &member.user.id.to_string())
-            .await
-            .ok()
+        .await;
+
+        match created {
+            Ok(()) => {
+                // Only fetch the count if the write succeeded (otherwise it's stale)
+                Warning::count(&db, &guild_id, &member.user.id.to_string())
+                    .await
+                    .ok()
+            }
+            Err(e) => {
+                tracing::warn!("Failed to persist warning to database: {e}");
+                None
+            }
+        }
     } else {
         None
     };

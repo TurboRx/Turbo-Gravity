@@ -24,14 +24,23 @@ pub async fn unban(
         .trim()
         .parse()
         .map_err(|_| anyhow::anyhow!("Invalid user ID – must be a numeric Discord snowflake"))?;
+
+    // Snowflake 0 is never a real user
+    if uid == 0 {
+        ctx.say("Invalid user ID.").await?;
+        return Ok(());
+    }
+
     let uid = serenity::UserId::new(uid);
 
-    // Check the ban exists (bans takes http, pagination option, limit option)
-    let bans = guild_id.bans(ctx, None, None).await?;
-    let ban = bans.iter().find(|b| b.user.id == uid);
-    let ban = if let Some(b) = ban { b.clone() } else {
-        ctx.say("That user is not banned.").await?;
-        return Ok(());
+    // Look up the specific ban entry directly instead of fetching all bans
+    // (fetching all bans silently fails on servers with > 1000 bans).
+    let ban = match guild_id.ban(ctx, uid).await {
+        Ok(b) => b,
+        Err(_) => {
+            ctx.say("That user is not banned on this server.").await?;
+            return Ok(());
+        }
     };
 
     guild_id

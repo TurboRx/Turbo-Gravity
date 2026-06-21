@@ -2,6 +2,7 @@ mod balance;
 mod ball8;
 mod coinflip;
 mod daily;
+mod leaderboard;
 mod roll;
 mod work;
 
@@ -15,6 +16,7 @@ pub fn commands() -> Vec<Command<SharedState, Error>> {
         balance::balance(),
         coinflip::coinflip(),
         daily::daily(),
+        leaderboard::leaderboard(),
         roll::roll(),
         work::work(),
     ]

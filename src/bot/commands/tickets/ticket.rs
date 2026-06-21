@@ -69,6 +69,13 @@ pub async fn create(
 
     let username = ctx.author().name.to_lowercase();
     let safe_name: String = username.chars().filter(|c| c.is_alphanumeric()).collect();
+    // Fall back to a slice of the numeric user ID so the channel name is never empty
+    let safe_name = if safe_name.is_empty() {
+        let id = ctx.author().id.to_string();
+        id.chars().take(8).collect::<String>()
+    } else {
+        safe_name
+    };
     let disc = ctx
         .author()
         .discriminator

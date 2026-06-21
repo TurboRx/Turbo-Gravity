@@ -3,6 +3,7 @@ mod channelinfo;
 mod contime;
 mod embed;
 mod help;
+mod membercount;
 mod ping;
 mod roleinfo;
 mod serverinfo;
@@ -21,6 +22,7 @@ pub fn commands() -> Vec<Command<SharedState, Error>> {
         contime::contime(),
         embed::embed(),
         help::help(),
+        membercount::membercount(),
         ping::ping(),
         roleinfo::roleinfo(),
         serverinfo::serverinfo(),

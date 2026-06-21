@@ -49,6 +49,7 @@ impl User {
     }
 
     /// Find the user or create a minimal document for them using `MongoDB`'s atomic upsert.
+    /// Always updates `username` and `avatar` in case they changed.
     pub async fn upsert(
         db: &Database,
         discord_id: &str,
@@ -61,13 +62,16 @@ impl User {
         let col = Self::collection(db);
         let filter = doc! { "discord_id": discord_id };
 
-        // Use $setOnInsert to set fields only on document creation
+        // $set always runs (keeps username/avatar up-to-date).
+        // $setOnInsert only runs when a new document is created.
         let update = doc! {
+            "$set": {
+                "username": username,
+                "avatar": avatar,
+            },
             "$setOnInsert": {
                 "discord_id": discord_id,
-                "username": username,
                 "discriminator": discriminator,
-                "avatar": avatar,
                 "balance": 0_i64,
                 "xp": 0_i64,
                 "level": 1_i64,
@@ -89,10 +93,14 @@ impl User {
     }
 
     pub async fn save(&self, db: &Database) -> anyhow::Result<()> {
+        use mongodb::options::UpdateOptions;
         let col = Self::collection(db);
         let filter = doc! { "discord_id": &self.discord_id };
         let update = doc! { "$set": mongodb::bson::to_bson(self)? };
-        col.update_one(filter, update).await?;
+        // Use upsert: true so a race-deleted document is re-created rather than
+        // silently discarding the save (BUG-21).
+        let opts = UpdateOptions::builder().upsert(true).build();
+        col.update_one(filter, update).with_options(opts).await?;
         Ok(())
     }
 }

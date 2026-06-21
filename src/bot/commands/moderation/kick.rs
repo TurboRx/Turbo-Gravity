@@ -51,14 +51,15 @@ pub async fn kick(
         }
     }
 
-    // Try to DM before kicking
+    // Try to DM before kicking — moved to AFTER kick succeeds to avoid false notifications
+    member.kick_with_reason(ctx, &reason).await?;
+
     let dm = serenity::CreateMessage::new().content(format!(
         "You were kicked from **{guild_name}** | Reason: {reason}"
     ));
     let _ = member.user.dm(ctx, dm).await;
 
-    member.kick_with_reason(ctx, &reason).await?;
-    ctx.say(format!("Kicked {} | Reason: {reason}", member.user.name))
+    ctx.say(format!("👢 Kicked **{}** | Reason: {reason}", member.user.name))
         .await?;
     Ok(())
 }

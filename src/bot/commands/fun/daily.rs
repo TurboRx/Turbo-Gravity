@@ -34,14 +34,23 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
     let last_ms = profile
         .last_daily
         .map_or(0, mongodb::bson::DateTime::timestamp_millis);
-    let elapsed_secs = (now_ms - last_ms) / 1000;
+    // Clamp to 0 to guard against clock skew or future timestamps in the DB.
+    let elapsed_secs = ((now_ms - last_ms) / 1000).max(0);
 
     if elapsed_secs < DAILY_COOLDOWN_SECS {
         let remaining = DAILY_COOLDOWN_SECS - elapsed_secs;
         let hours = remaining / 3600;
         let minutes = (remaining % 3600) / 60;
+        let seconds = remaining % 60;
+        let time_str = if hours > 0 {
+            format!("{hours}h {minutes}m")
+        } else if minutes > 0 {
+            format!("{minutes}m {seconds}s")
+        } else {
+            format!("{seconds}s")
+        };
         ctx.say(format!(
-            "⏰ Daily already claimed! Come back in **{hours}h {minutes}m**."
+            "⏰ Daily already claimed! Come back in **{time_str}**."
         ))
         .await?;
         return Ok(());
@@ -51,6 +60,12 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
     profile.balance += earned;
     profile.xp += XP_GAINED;
     profile.last_daily = Some(BsonDateTime::now());
+
+    // Guard against a corrupted level value — a level of 0 would cause the
+    // XP cost to be 0 and create an infinite loop.
+    if profile.level < 1 {
+        profile.level = 1;
+    }
 
     // Level-up loop: consume XP before incrementing level to prevent infinite leveling
     while profile.xp >= profile.level * 100 {

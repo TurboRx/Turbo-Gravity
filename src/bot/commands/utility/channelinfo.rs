@@ -42,12 +42,10 @@ pub async fn channelinfo(
             embed = embed.field("Topic", topic.clone(), false);
         }
     }
-    if ch.rate_limit_per_user.unwrap_or(0) > 0 {
-        embed = embed.field(
-            "Slowmode",
-            format!("{}s", ch.rate_limit_per_user.unwrap()),
-            true,
-        );
+    if let Some(rate) = ch.rate_limit_per_user {
+        if rate > 0 {
+            embed = embed.field("Slowmode", format!("{rate}s"), true);
+        }
     }
     if let Some(parent) = ch.parent_id {
         embed = embed.field("Category", format!("<#{parent}>"), true);
